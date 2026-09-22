@@ -3,7 +3,7 @@ from jarvis.assistant import Assistant
 
 def main():
     assistant = Assistant()
-    print("Jarvis is online. Type 'exit' to quit.\n")
+    print("Jarvis is online. Type 'exit' to quit, '/reset' to clear memory.\n")
 
     while True:
         try:
@@ -17,6 +17,10 @@ def main():
         if user_input.lower() in {"exit", "quit"}:
             print("Jarvis: Goodbye.")
             break
+        if user_input.lower() == "/reset":
+            assistant.reset_memory()
+            print("Jarvis: Memory cleared - facts and conversation history wiped.\n")
+            continue
 
         reply = assistant.send(user_input)
         print(f"Jarvis: {reply}\n")

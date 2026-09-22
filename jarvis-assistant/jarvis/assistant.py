@@ -1,6 +1,7 @@
 import anthropic
 
-from .config import ANTHROPIC_API_KEY, MODEL, SYSTEM_PROMPT
+from . import memory
+from .config import ANTHROPIC_API_KEY, MODEL, build_system_prompt
 from .tools import TOOL_FUNCTIONS, TOOL_SPECS
 
 
@@ -12,7 +13,7 @@ class Assistant:
                 "and add your key."
             )
         self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        self.history = []
+        self.history = memory.load_history()
 
     def _run_tool(self, name: str, tool_input: dict) -> str:
         func = TOOL_FUNCTIONS.get(name)
@@ -23,21 +24,35 @@ class Assistant:
         except Exception as exc:  # tool failures shouldn't crash the loop
             return f"Tool '{name}' failed: {exc}"
 
+    def reset_memory(self) -> None:
+        memory.save_facts({})
+        memory.save_history([])
+        self.history = []
+
     def send(self, user_message: str) -> str:
         self.history.append({"role": "user", "content": user_message})
+        if len(self.history) > memory.MAX_HISTORY_MESSAGES:
+            self.history = self.history[-memory.MAX_HISTORY_MESSAGES :]
 
         while True:
+            system_prompt = build_system_prompt(memory.load_facts())
             response = self.client.messages.create(
                 model=MODEL,
                 max_tokens=1024,
-                system=SYSTEM_PROMPT,
+                system=system_prompt,
                 tools=TOOL_SPECS,
                 messages=self.history,
             )
 
-            self.history.append({"role": "assistant", "content": response.content})
+            self.history.append(
+                {
+                    "role": "assistant",
+                    "content": [block.model_dump() for block in response.content],
+                }
+            )
 
             if response.stop_reason != "tool_use":
+                memory.save_history(self.history)
                 return "".join(
                     block.text for block in response.content if block.type == "text"
                 )
