@@ -1,5 +1,5 @@
-# Ready-made profile for a Database Administrator with ~2 years 2 months of
-# experience, targeting Bengaluru and Chennai.
+# Ready-made profile for an open-source Database Administrator (MySQL /
+# MariaDB) with ~2 years 2 months of experience, targeting Bengaluru and Chennai.
 #
 #   cp profile.dba.example.yaml profile.yaml   # then fill in the personal: section
 #
@@ -25,25 +25,36 @@ search:
   titles:
     - Database Administrator            # "DBA" in a title is treated as the same thing
     - Database Engineer
-    - Oracle DBA
-    - SQL Server DBA
-    - PostgreSQL DBA
     - MySQL DBA
+    - MariaDB DBA
+    - Open Source DBA
+    - PostgreSQL DBA
     - Database Reliability Engineer
-  keywords: ["database administrator", "dba"]
+  keywords: ["mysql dba", "database administrator"]
   locations: ["Bengaluru", "Chennai"]  # "Bangalore" and "Madras" also match
   include_remote: false                # set true to also get remote-in-India roles
   remote_only: false
   min_salary_usd: 0
-  # Skip roles that are clearly too senior for ~2 years of experience.
-  exclude_title_keywords: ["principal", "staff", "architect", "lead", "manager", "director", "head", "intern"]
+  # Open-source databases only: reject any posting that doesn't mention
+  # MySQL or MariaDB (the core skills below).
+  require_core_skill: true
+  exclude_title_keywords: [
+    # too senior for ~2 years of experience
+    "principal", "staff", "architect", "lead", "manager", "director", "head", "intern",
+    # proprietary databases you don't work with
+    "oracle", "sql server", "mssql", "db2", "sybase", "teradata",
+  ]
   exclude_keywords: []
   exclude_companies: []
 
+# Weighting: core counts 2, other counts 1, basic counts 0.5.
 skills:
-  core: ["SQL", "Oracle", "MySQL", "PostgreSQL", "SQL Server", "Backup and Recovery", "Performance Tuning"]
-  other: ["Replication", "High Availability", "Linux", "Shell Scripting", "PL/SQL", "T-SQL",
-          "Indexing", "Monitoring", "AWS RDS", "Python"]
+  core: ["MySQL", "MariaDB"]                       # excellent
+  other: ["PostgreSQL", "Linux", "Shell Scripting", # intermediate / good working knowledge
+          # Typical MySQL DBA duties. Keep only the ones you've actually done;
+          # Claude uses this list when answering screening questions.
+          "Replication", "Backup and Recovery", "Performance Tuning", "High Availability"]
+  basic: ["MongoDB", "ArangoDB"]                   # basic knowledge
 
 # Companies whose careers pages run on Greenhouse / Lever / Ashby and that have
 # offices in Bengaluru or Chennai. These are STARTING POINTS, not a vetted

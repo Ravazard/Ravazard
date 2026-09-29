@@ -83,6 +83,30 @@ def test_matching_helpers():
     assert html_to_text("&lt;p&gt;Hi &amp;amp; bye&lt;/p&gt;") == "Hi & bye"
 
 
+def _job(title, desc, location="Chennai"):
+    from jobhunter.models import Job
+
+    return Job(source="t", external_id=title, company="X", title=title, url="u",
+               location=location, description=desc)
+
+
+def test_open_source_only(profile):
+    # Generic DBA title, but an Oracle-only posting: rejected (no MySQL/MariaDB).
+    oracle = score_job(_job("Database Administrator", "Oracle 19c, RMAN, Data Guard, PL/SQL. 2+ years."), profile)
+    assert oracle.excluded and "core skills" in oracle.reasons[0]
+    # Proprietary DB in the title: rejected.
+    assert score_job(_job("SQL Server DBA", "MySQL a plus"), profile).excluded
+    # MongoDB-only role: you only have basic Mongo, so it's rejected.
+    assert score_job(_job("Database Administrator", "MongoDB sharding and replica sets"), profile).excluded
+    # MariaDB / Galera role: strong match.
+    maria = score_job(_job("MariaDB DBA", "MariaDB Galera cluster, replication, backups, Linux, bash. 2-4 years."), profile)
+    assert not maria.excluded and maria.score >= 80
+    # Postgres-first role that also mentions MySQL: still a match, but lower than a MySQL-first one.
+    pg = score_job(_job("PostgreSQL DBA", "PostgreSQL primary, some MySQL. Linux."), profile)
+    my = score_job(_job("MySQL DBA", "MySQL, MariaDB, Percona, Linux, shell scripting, replication."), profile)
+    assert not pg.excluded and my.score > pg.score
+
+
 def test_bangalore_alias(profile):
     jobs = all_jobs(profile)
     job = jobs["acme/101"]
@@ -111,7 +135,7 @@ def test_cli_search_list_approve(tmp_path, monkeypatch, capsys, profile):
     out = capsys.readouterr().out
     assert "6 new jobs, 2 good matches" in out
 
-    assert main(["--profile", str(prof), "--db", db, "approve", "--top", "1"]) == 0
+    assert main(["--profile", str(prof), "--db", db, "approve", "--top", "5"]) == 0
     store = Store(db)
     approved = store.by_status(Status.APPROVED)
-    assert [j.key for j in approved] == ["greenhouse:acme/101"]
+    assert {j.key for j in approved} == {"greenhouse:acme/101", "ashby:initech/f00-1"}

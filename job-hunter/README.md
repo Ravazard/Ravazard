@@ -29,7 +29,7 @@ cp profile.dba.example.yaml profile.yaml   # or profile.example.yaml for a blank
 # edit profile.yaml, then put your resume next to it as resume.pdf
 ```
 
-## Example: DBA roles in Bengaluru and Chennai, 2 yrs 2 months of experience
+## Example: open-source DBA roles in Bengaluru and Chennai, 2 yrs 2 months of experience
 
 `profile.dba.example.yaml` is already set up for this search:
 
@@ -37,15 +37,22 @@ cp profile.dba.example.yaml profile.yaml   # or profile.example.yaml for a blank
 personal:
   years_experience: 2.17          # 2 years 2 months
 search:
-  titles: [Database Administrator, Database Engineer, Oracle DBA, SQL Server DBA, PostgreSQL DBA, MySQL DBA]
+  titles: [Database Administrator, Database Engineer, MySQL DBA, MariaDB DBA, Open Source DBA, PostgreSQL DBA]
   locations: [Bengaluru, Chennai] # "Bangalore" and "Madras" also match
-  exclude_title_keywords: [principal, staff, architect, lead, manager, director, head, intern]
+  require_core_skill: true        # posting must mention MySQL or MariaDB
+  exclude_title_keywords: [principal, staff, architect, lead, manager, oracle, sql server, db2, ...]
 skills:
-  core: [SQL, Oracle, MySQL, PostgreSQL, SQL Server, Backup and Recovery, Performance Tuning]
+  core:  [MySQL, MariaDB]                        # weight 2
+  other: [PostgreSQL, Linux, Shell Scripting, ...] # weight 1
+  basic: [MongoDB, ArangoDB]                     # weight 0.5
 ```
 
-Roles that ask for much more experience than you have (for example 5–8 years)
-drop below the threshold. Senior titles are excluded outright.
+- A "Database Administrator" posting that only mentions Oracle, SQL Server
+  or MongoDB is rejected.
+- A MySQL- or MariaDB-first role ranks above a Postgres-first role that also
+  mentions MySQL.
+- Roles asking for much more experience than you have (for example 5–8
+  years) drop below the threshold. Senior titles are excluded outright.
 
 ```bash
 python -m jobhunter search              # fetch and score; prints the matches

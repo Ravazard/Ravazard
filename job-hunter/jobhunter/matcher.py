@@ -29,6 +29,10 @@ ALIASES: dict[str, list[str]] = {
     "typescript": ["ts"],
     "go": ["golang"],
     "postgresql": ["postgres"],
+    "mysql": ["percona", "innodb", "aurora mysql"],
+    "mariadb": ["maria db"],
+    "mongodb": ["mongo"],
+    "arangodb": ["arango"],
     "sql server": ["mssql", "ms sql", "microsoft sql server"],
     "oracle": ["oracle 19c", "oracle 12c", "oracle db", "oracle database"],
     "backup and recovery": ["backup & recovery", "backups", "rman", "point-in-time recovery"],
@@ -152,10 +156,14 @@ def score_job(job: Job, profile: Profile) -> Match:
     reasons.append(f"title match {t:.0%}")
 
     # ---- skills --------------------------------------------------------------
-    weights = {sk: 2 for sk in profile.skills.core} | {
-        sk: 1 for sk in profile.skills.other if sk not in profile.skills.core
-    }
+    weights: dict[str, float] = {sk: 0.5 for sk in profile.skills.basic}
+    weights |= {sk: 1 for sk in profile.skills.other}
+    weights |= {sk: 2 for sk in profile.skills.core}
     matched = [sk for sk in weights if has_term(text, sk)]
+    if s.require_core_skill and profile.skills.core and not any(
+        sk in profile.skills.core for sk in matched
+    ):
+        return Match(0, ["none of your core skills (" + ", ".join(profile.skills.core) + ") mentioned"], True)
     if weights:
         got = sum(weights[sk] for sk in matched)
         # Saturate: a posting rarely lists *all* of your skills.

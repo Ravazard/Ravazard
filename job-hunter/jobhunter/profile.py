@@ -33,6 +33,7 @@ class Search(BaseModel):
     keywords: list[str] = Field(default_factory=list)
     remote_only: bool = False
     include_remote: bool = True      # also accept remote jobs outside your locations
+    require_core_skill: bool = False  # reject postings that mention none of your core skills
     locations: list[str] = Field(default_factory=list)
     min_salary_usd: int = 0
     exclude_title_keywords: list[str] = Field(default_factory=list)
@@ -41,8 +42,9 @@ class Search(BaseModel):
 
 
 class Skills(BaseModel):
-    core: list[str] = Field(default_factory=list)
-    other: list[str] = Field(default_factory=list)
+    core: list[str] = Field(default_factory=list)    # strongest skills, weight 2
+    other: list[str] = Field(default_factory=list)   # solid working knowledge, weight 1
+    basic: list[str] = Field(default_factory=list)   # familiarity only, weight 0.5
 
 
 class Sources(BaseModel):
