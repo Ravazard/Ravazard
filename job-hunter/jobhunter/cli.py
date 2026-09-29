@@ -163,6 +163,9 @@ def cmd_skip(args, profile: Profile, store: Store) -> int:
 def cmd_apply(args, profile: Profile, store: Store) -> int:
     from jobhunter.apply import apply_to_job, launch_browser
 
+    if problems := profile.problems():
+        print("Fix these in your profile before applying:\n  - " + "\n  - ".join(problems))
+        return 1
     submit = args.submit or not profile.apply.dry_run
     limit = min(args.limit or profile.apply.max_per_run, profile.apply.max_per_run)
     queue = store.by_status(Status.APPROVED, Status.DRY_RUN if submit else Status.APPROVED, limit=limit)

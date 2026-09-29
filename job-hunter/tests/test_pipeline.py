@@ -107,6 +107,23 @@ def test_open_source_only(profile):
     assert not pg.excluded and my.score > pg.score
 
 
+def test_placeholder_values_block_applying(profile):
+    probs = " ".join(profile.problems())
+    assert "email" in probs and "first_name" in probs and "linkedin" in probs
+    profile.personal.first_name, profile.personal.last_name = "Test", "User"
+    profile.personal.email, profile.personal.phone = "me@mail.test", "+91 9000000001"
+    profile.personal.linkedin = profile.personal.current_company = ""
+    assert profile.problems() == []
+
+
+def test_canned_answers_match_whole_words(profile):
+    profile.answers = {"age": "24", "notice period": "60-90 days"}
+    assert profile.canned_answer("What is your age?") == "24"
+    assert profile.canned_answer("Which languages do you speak?") is None
+    assert profile.canned_answer("Have you managed a team?") is None
+    assert profile.canned_answer("Notice Period (days)") == "60-90 days"
+
+
 def test_bangalore_alias(profile):
     jobs = all_jobs(profile)
     job = jobs["acme/101"]

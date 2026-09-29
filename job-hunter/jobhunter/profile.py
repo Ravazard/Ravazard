@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -84,12 +85,25 @@ class Profile(BaseModel):
         p = Path(self.personal.resume_path).expanduser()
         return p if p.is_absolute() else (self.base_dir / p).resolve()
 
+    def problems(self) -> list[str]:
+        """Things that must be fixed before real applications go out."""
+        out = []
+        p = self.personal
+        if not p.email or "example.com" in p.email:
+            out.append("personal.email is not set")
+        for name in ("first_name", "last_name", "email", "phone", "linkedin", "current_company"):
+            value = getattr(p, name)
+            if re.search(r"your-handle|example\.com|^your\b|^name$|fill.?me|90000 00000|555 000", value, re.I):
+                out.append(f"personal.{name} still has the example value '{value}'")
+        return sorted(set(out))
+
     def canned_answer(self, question: str) -> str | None:
-        """Return a configured answer whose key appears in the question label."""
+        """Return a configured answer whose key appears (as whole words) in the question label."""
         q = question.lower()
         # Longest key first so "authorized to work" beats "work".
         for key in sorted(self.answers, key=len, reverse=True):
-            if key.lower() in q:
+            # Whole words only, so "age" doesn't match "language" or "manage".
+            if re.search(rf"(?<![a-z0-9]){re.escape(key.lower())}(?![a-z0-9])", q):
                 return self.answers[key]
         return None
 
