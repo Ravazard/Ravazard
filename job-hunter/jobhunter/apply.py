@@ -1,0 +1,441 @@
+"""Fill out and submit application forms with a real browser (Playwright).
+
+One generic, label-driven form filler handles Greenhouse, Lever and Ashby:
+it reads every form control on the page, works out what each one is asking
+(from its <label>, aria-label, placeholder or name), and answers it from:
+
+    1. your profile     (name, email, phone, LinkedIn, GitHub, location, ...)
+    2. `answers:`       (canned answers to screening questions in profile.yaml)
+    3. Claude           (optional; only from facts in your profile)
+
+Safety rails:
+  * If any *required* question can't be answered, the job is marked
+    needs_manual and nothing is submitted.
+  * CAPTCHAs are never bypassed: the job is marked needs_manual.
+  * With dry_run (the default), forms are filled and screenshotted but not submitted.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import re
+import tempfile
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from jobhunter.models import Job, Status
+from jobhunter.profile import Profile
+
+log = logging.getLogger(__name__)
+
+NAV_TIMEOUT_MS = 45_000
+
+
+def launch_browser(pw, headless: bool = True):
+    """Launch Chromium; JOBHUNTER_CHROMIUM can point at a specific binary."""
+    exe = os.environ.get("JOBHUNTER_CHROMIUM") or None
+    return pw.chromium.launch(headless=headless, executable_path=exe)
+
+# Marks every visible form control with data-jh-idx and describes it.
+DESCRIBE_FIELDS_JS = r"""
+() => {
+  const clean = s => (s || "").replace(/\s+/g, " ").replace(/\*/g, "").trim();
+  const visible = el => {
+    if (el.type === "file") return true;              // file inputs are usually hidden behind a button
+    const r = el.getBoundingClientRect();
+    const st = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && st.visibility !== "hidden" && st.display !== "none";
+  };
+  const labelFor = el => {
+    if (el.id) {
+      const l = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+      if (l) return clean(l.innerText);
+    }
+    const wrap = el.closest("label");
+    if (wrap && clean(wrap.innerText)) return clean(wrap.innerText);
+    if (el.getAttribute("aria-labelledby")) {
+      const t = el.getAttribute("aria-labelledby").split(/\s+/)
+        .map(id => document.getElementById(id)).filter(Boolean).map(n => n.innerText).join(" ");
+      if (clean(t)) return clean(t);
+    }
+    if (el.getAttribute("aria-label")) return clean(el.getAttribute("aria-label"));
+    // Nearest ancestor that contains a label/legend-ish element.
+    let node = el.parentElement;
+    for (let i = 0; node && i < 5; i++, node = node.parentElement) {
+      const l = node.querySelector("label, legend, .application-label, [class*=label], [class*=question]");
+      if (l && !l.contains(el) && clean(l.innerText)) return clean(l.innerText);
+    }
+    return clean(el.placeholder || el.name || el.id);
+  };
+  const groupQuestion = el => {
+    const fs = el.closest("fieldset");
+    if (fs) {
+      const lg = fs.querySelector("legend");
+      if (lg && clean(lg.innerText)) return clean(lg.innerText);
+    }
+    let node = el.parentElement;
+    for (let i = 0; node && i < 6; i++, node = node.parentElement) {
+      const inputs = node.querySelectorAll(`input[name="${CSS.escape(el.name)}"]`);
+      if (inputs.length > 1 || i > 2) {
+        const l = node.querySelector("legend, .application-label, [class*=label], [class*=question], label:not(:has(input))");
+        if (l && clean(l.innerText)) return clean(l.innerText);
+      }
+    }
+    return clean(el.name);
+  };
+
+  const out = [];
+  const seenGroups = new Set();
+  let idx = 0;
+  for (const el of document.querySelectorAll("input, textarea, select")) {
+    const type = (el.type || el.tagName).toLowerCase();
+    if (["hidden", "submit", "button", "reset", "image", "search"].includes(type)) continue;
+    if (el.disabled || !visible(el)) continue;
+    const required = el.required || el.getAttribute("aria-required") === "true" ||
+      /\*/.test((el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.innerText) || "");
+
+    if ((type === "radio" || type === "checkbox") && el.name) {
+      const group = [...document.querySelectorAll(`input[name="${CSS.escape(el.name)}"]`)];
+      if (type === "radio" || group.length > 1) {
+        if (seenGroups.has(el.name)) continue;
+        seenGroups.add(el.name);
+        const options = group.map(g => {
+          g.setAttribute("data-jh-idx", String(idx));
+          return clean(labelFor(g) || g.value);
+        });
+        out.push({ idx: idx++, kind: type + "-group", name: el.name, id: el.id, label: groupQuestion(el),
+                   required: group.some(g => g.required) || required, options });
+        continue;
+      }
+    }
+    el.setAttribute("data-jh-idx", String(idx));
+    const options = el.tagName === "SELECT"
+      ? [...el.options].filter(o => o.value !== "").map(o => clean(o.text)) : [];
+    const kind = el.tagName === "SELECT" ? "select"
+      : el.getAttribute("role") === "combobox" ? "combobox"
+      : el.tagName === "TEXTAREA" ? "textarea" : type;
+    out.push({ idx: idx++, kind, name: el.name || "", id: el.id || "", label: labelFor(el),
+               placeholder: el.placeholder || "", required, options });
+  }
+  return out;
+}
+"""
+
+CAPTCHA_SELECTORS = [
+    "iframe[src*='recaptcha']:visible",
+    "iframe[src*='hcaptcha']:visible",
+    "iframe[src*='challenges.cloudflare.com']:visible",
+    ".h-captcha:visible",
+    ".g-recaptcha:visible",
+]
+
+SUCCESS_RE = re.compile(
+    r"thank you for (applying|your application|your interest)|application (has been )?"
+    r"(submitted|received)|we('ve| have) received your application|successfully submitted",
+    re.I,
+)
+
+SUBMIT_SELECTORS = [
+    "button[type=submit]:visible",
+    "input[type=submit]:visible",
+    "button:has-text('Submit application'):visible",
+    "button:has-text('Submit Application'):visible",
+    "button:has-text('Submit'):visible",
+]
+
+
+@dataclass
+class Field:
+    idx: int
+    kind: str
+    label: str
+    name: str = ""
+    id: str = ""
+    placeholder: str = ""
+    required: bool = False
+    options: list[str] = field(default_factory=list)
+
+    @property
+    def key(self) -> str:
+        """Everything we know about the field, for matching standard profile fields."""
+        return " ".join([self.label, self.name, self.id, self.placeholder]).lower()
+
+
+@dataclass
+class ApplyResult:
+    status: Status
+    note: str = ""
+    screenshot: str = ""
+    filled: dict[str, str] = field(default_factory=dict)
+
+
+# (regex over field.key, profile attribute or callable) -- first match wins.
+def _standard_fields(profile: Profile) -> list[tuple[str, str]]:
+    p = profile.personal
+    return [
+        (r"first[\s_-]?name|given[\s_-]?name|preferred first", p.first_name),
+        (r"last[\s_-]?name|family[\s_-]?name|surname", p.last_name),
+        (r"\bfull[\s_-]?name\b|^name\b|\bname\b(?!.*(company|employer|school|reference))", p.full_name),
+        (r"e-?mail", p.email),
+        (r"phone|mobile", p.phone),
+        (r"linkedin", p.linkedin),
+        (r"github", p.github),
+        (r"website|portfolio|personal (site|url)|\burls\[other\]", p.website or p.github),
+        (r"current (company|employer)|most recent (company|employer)|^org\b|\borg\b", p.current_company),
+        (r"\blocation\b|\bcity\b|where are you (based|located)|current address", p.location),
+        (r"years of (professional |relevant )?experience", str(int(p.years_experience))),
+    ]
+
+
+def pick_option(answer: str, options: list[str]) -> str | None:
+    """Choose the option that best matches a free-text answer."""
+    if not options:
+        return None
+    a = answer.strip().lower()
+    for opt in options:                       # exact
+        if opt.strip().lower() == a:
+            return opt
+    for opt in options:                       # option starts with answer ("Yes, I am ...")
+        if opt.strip().lower().startswith(a) and a:
+            return opt
+    for opt in options:                       # answer contained in option
+        if a and a in opt.lower():
+            return opt
+    return None
+
+
+class Resolver:
+    """Decides what to type into each field."""
+
+    def __init__(self, profile: Profile, job: Job, use_llm: bool):
+        self.profile = profile
+        self.job = job
+        self.use_llm = use_llm
+        self._std = _standard_fields(profile)
+
+    def resolve(self, f: Field) -> str | None:
+        text_like = f.kind in {"text", "email", "tel", "url", "textarea", "combobox", "number"}
+        if text_like:
+            for pattern, value in self._std:
+                if value and re.search(pattern, f.key):
+                    return value
+        if re.search(r"cover letter", f.key) and f.kind == "textarea":
+            return self.cover_letter()
+
+        canned = self.profile.canned_answer(f.label) if f.label else None
+        if canned is not None and canned != "":
+            if f.options:
+                return pick_option(canned, f.options)
+            return canned
+
+        if f.kind == "checkbox" and f.required and re.search(
+            r"agree|consent|acknowledge|privacy|terms|certify|confirm", f.key
+        ):
+            return "check"
+
+        if self.use_llm and f.label and (f.required or f.kind in {"textarea", "select", "radio-group"}):
+            from jobhunter import llm
+
+            return llm.answer_question(f.label, f.options, self.job, self.profile)
+        return None
+
+    def cover_letter(self) -> str:
+        if self.profile.apply.use_llm_for_cover_letter:
+            from jobhunter import llm
+
+            try:
+                return llm.write_cover_letter(self.job, self.profile)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("LLM cover letter failed, using template: %s", exc)
+        return self.profile.cover_letter(self.job.company, self.job.title)
+
+
+def _has_captcha(frame) -> bool:
+    return any(frame.locator(sel).count() > 0 for sel in CAPTCHA_SELECTORS)
+
+
+def _form_frame(page):
+    """Greenhouse is often embedded in an iframe on the company's own site."""
+    best, best_n = page.main_frame, -1
+    for fr in page.frames:
+        try:
+            n = fr.locator("input:not([type=hidden]), textarea, select").count()
+        except Exception:  # noqa: BLE001 - detached frames
+            continue
+        if n > best_n:
+            best, best_n = fr, n
+    return best
+
+
+def _open_form(page, job: Job) -> None:
+    page.goto(job.apply_url or job.url, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
+    page.wait_for_timeout(1500)
+    # Some pages show the posting first with an "Apply" button.
+    frame = _form_frame(page)
+    if frame.locator("input[type=email], input[type=file]").count() == 0:
+        for sel in ["a:has-text('Apply for this job')", "button:has-text('Apply for this job')",
+                    "a:has-text('Apply now')", "button:has-text('Apply now')",
+                    "a:has-text('Apply')", "button:has-text('Apply')"]:
+            btn = page.locator(sel).first
+            if btn.count() and btn.is_visible():
+                btn.click()
+                page.wait_for_timeout(2000)
+                break
+
+
+def _fill(frame, f: Field, value: str, resume: Path | None, cover_file: Path | None) -> bool:
+    loc = frame.locator(f'[data-jh-idx="{f.idx}"]')
+    if f.kind == "file":
+        path = cover_file if re.search(r"cover", f.key) else resume
+        if not path:
+            return False
+        loc.first.set_input_files(str(path))
+        return True
+    if f.kind == "select":
+        loc.first.select_option(label=value)
+        return True
+    if f.kind in ("radio-group", "checkbox-group"):
+        i = f.options.index(value)
+        loc.nth(i).check(force=True)
+        return True
+    if f.kind in ("checkbox", "radio"):
+        loc.first.check(force=True)
+        return True
+    if f.kind == "combobox":
+        loc.first.click()
+        loc.first.fill(value)
+        frame.page.wait_for_timeout(800)
+        opt = frame.locator("[role=option]").first
+        if opt.count():
+            opt.click()
+        else:
+            loc.first.press("Enter")
+        return True
+    loc.first.fill(value)
+    return True
+
+
+def apply_to_job(
+    job: Job,
+    profile: Profile,
+    *,
+    dry_run: bool = True,
+    headless: bool = True,
+    screenshot_dir: Path = Path("screenshots"),
+    browser=None,
+) -> ApplyResult:
+    """Fill the application form for `job`, and submit it unless dry_run."""
+    if job.ats not in {"greenhouse", "lever", "ashby"}:
+        return ApplyResult(Status.NEEDS_MANUAL, f"unsupported application site ({job.apply_url})")
+
+    resume = profile.resume_file
+    if not resume or not resume.exists():
+        return ApplyResult(Status.FAILED, f"resume not found at {resume}")
+
+    screenshot_dir.mkdir(parents=True, exist_ok=True)
+    shot = screenshot_dir / f"{re.sub(r'[^A-Za-z0-9_-]+', '_', job.key)}.png"
+    resolver = Resolver(profile, job, use_llm=profile.apply.use_llm_for_questions)
+
+    own_pw = None
+    if browser is None:
+        from playwright.sync_api import sync_playwright
+
+        own_pw = sync_playwright().start()
+        browser = launch_browser(own_pw, headless)
+    context = browser.new_context(viewport={"width": 1280, "height": 1800})
+    page = context.new_page()
+    try:
+        _open_form(page, job)
+        frame = _form_frame(page)
+        if _has_captcha(frame):
+            page.screenshot(path=str(shot), full_page=True)
+            return ApplyResult(Status.NEEDS_MANUAL, "captcha on form", str(shot))
+
+        fields = [Field(**d) for d in frame.evaluate(DESCRIBE_FIELDS_JS)]
+        if not any(f.kind == "email" or "email" in f.key for f in fields):
+            page.screenshot(path=str(shot), full_page=True)
+            return ApplyResult(Status.NEEDS_MANUAL, "couldn't find the application form", str(shot))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cover_file = None
+            if any(f.kind == "file" and "cover" in f.key for f in fields):
+                cover_file = Path(tmp) / "cover_letter.txt"
+                cover_file.write_text(resolver.cover_letter())
+
+            filled: dict[str, str] = {}
+            missing: list[str] = []
+            for f in fields:
+                try:
+                    if f.kind == "file":
+                        # Cover-letter upload gets the letter; the first other upload gets the resume.
+                        slot = "cover letter" if "cover" in f.key else "resume"
+                        if slot not in filled and _fill(frame, f, "", resume, cover_file):
+                            filled[slot] = "uploaded"
+                        elif f.required:
+                            missing.append(f.label or f.name)
+                        continue
+
+                    value = resolver.resolve(f)
+                    if value is None or value == "":
+                        if f.required:
+                            missing.append(f.label or f.name)
+                        continue
+                    if f.options and f.kind != "combobox":
+                        choice = pick_option(value, f.options)
+                        if choice is None:
+                            if f.required:
+                                missing.append(f"{f.label} (no option matches '{value}')")
+                            continue
+                        value = choice
+                    _fill(frame, f, value, resume, cover_file)
+                    shown = " ".join(value.split())
+                    filled[f.label or f.name] = shown if len(shown) < 80 else shown[:77] + "..."
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("could not fill %s: %s", f.label, exc)
+                    if f.required:
+                        missing.append(f"{f.label} (error: {exc.__class__.__name__})")
+
+            page.screenshot(path=str(shot), full_page=True)
+            if missing:
+                return ApplyResult(Status.NEEDS_MANUAL,
+                                   "unanswered required: " + "; ".join(missing[:6]), str(shot), filled)
+            if dry_run:
+                return ApplyResult(Status.DRY_RUN, "form filled, not submitted (dry run)", str(shot), filled)
+
+            submit = None
+            for sel in SUBMIT_SELECTORS:
+                cand = frame.locator(sel).last
+                if cand.count():
+                    submit = cand
+                    break
+            if submit is None:
+                return ApplyResult(Status.NEEDS_MANUAL, "no submit button found", str(shot), filled)
+
+            submit.click()
+            try:
+                page.wait_for_load_state("networkidle", timeout=15_000)
+            except Exception:  # noqa: BLE001 - SPAs never go idle; that's fine
+                pass
+            page.wait_for_timeout(2000)
+            page.screenshot(path=str(shot), full_page=True)
+
+            body = " ".join(fr.locator("body").inner_text() for fr in page.frames if fr.locator("body").count())
+            if SUCCESS_RE.search(body):
+                return ApplyResult(Status.APPLIED, "submitted", str(shot), filled)
+            if _has_captcha(_form_frame(page)):
+                return ApplyResult(Status.NEEDS_MANUAL, "captcha appeared on submit", str(shot), filled)
+            # We clicked submit but can't confirm it. Never auto-retry: that could double-apply.
+            return ApplyResult(Status.NEEDS_MANUAL,
+                               "clicked submit but couldn't confirm; check your email", str(shot), filled)
+    except Exception as exc:  # noqa: BLE001
+        try:
+            page.screenshot(path=str(shot), full_page=True)
+        except Exception:  # noqa: BLE001
+            pass
+        return ApplyResult(Status.FAILED, f"{exc.__class__.__name__}: {exc}"[:300], str(shot))
+    finally:
+        context.close()
+        if own_pw:
+            browser.close()
+            own_pw.stop()

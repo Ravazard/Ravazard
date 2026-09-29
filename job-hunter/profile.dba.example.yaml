@@ -1,0 +1,91 @@
+# Ready-made profile for a Database Administrator with ~2 years 2 months of
+# experience, targeting Bengaluru and Chennai.
+#
+#   cp profile.dba.example.yaml profile.yaml   # then fill in the personal: section
+#
+# Edit the skills lists so they match what's actually on your resume. The
+# matcher and the optional Claude answers only use what you put here.
+
+personal:
+  first_name: Your
+  last_name: Name
+  email: you@example.com
+  phone: "+91 90000 00000"
+  location: "Bengaluru, India"
+  linkedin: "https://www.linkedin.com/in/your-handle"
+  github: ""
+  website: ""
+  resume_path: "./resume.pdf"
+  current_company: "Your Current Company"
+  years_experience: 2.17               # 2 years 2 months
+  work_authorization: "Indian citizen, authorized to work in India"
+  requires_sponsorship: false
+
+search:
+  titles:
+    - Database Administrator            # "DBA" in a title is treated as the same thing
+    - Database Engineer
+    - Oracle DBA
+    - SQL Server DBA
+    - PostgreSQL DBA
+    - MySQL DBA
+    - Database Reliability Engineer
+  keywords: ["database administrator", "dba"]
+  locations: ["Bengaluru", "Chennai"]  # "Bangalore" and "Madras" also match
+  include_remote: false                # set true to also get remote-in-India roles
+  remote_only: false
+  min_salary_usd: 0
+  # Skip roles that are clearly too senior for ~2 years of experience.
+  exclude_title_keywords: ["principal", "staff", "architect", "lead", "manager", "director", "head", "intern"]
+  exclude_keywords: []
+  exclude_companies: []
+
+skills:
+  core: ["SQL", "Oracle", "MySQL", "PostgreSQL", "SQL Server", "Backup and Recovery", "Performance Tuning"]
+  other: ["Replication", "High Availability", "Linux", "Shell Scripting", "PL/SQL", "T-SQL",
+          "Indexing", "Monitoring", "AWS RDS", "Python"]
+
+# Companies whose careers pages run on Greenhouse / Lever / Ashby and that have
+# offices in Bengaluru or Chennai. These are STARTING POINTS, not a vetted
+# list: a wrong slug is logged as FAILED and skipped. To add a company, open
+# its careers page. If the link goes to boards.greenhouse.io/<slug>,
+# jobs.lever.co/<slug> or jobs.ashbyhq.com/<slug>, add <slug> below.
+sources:
+  greenhouse: ["stripe", "databricks", "rubrik", "cloudflare", "mongodb", "confluent", "okta"]
+  lever: []
+  ashby: []
+  remotive: false
+  remoteok: false
+
+apply:
+  min_score: 55
+  auto_approve: false        # review matches with `list` and `show`, then `approve`
+  dry_run: true              # fill forms and take screenshots, but don't submit until you pass --submit
+  max_per_run: 10
+  headless: true
+  use_llm_for_cover_letter: false
+  use_llm_for_questions: false
+
+answers:
+  "how did you hear": "Company careers page"
+  "sponsorship": "No"
+  "authorized to work": "Yes"
+  "willing to relocate": "Yes"
+  "notice period": "30 days"
+  "years of experience": "2"
+  # Fill these in. If one is left empty and a form requires it, that job is
+  # marked needs_manual instead of being sent with a blank or made-up answer.
+  "current ctc": ""
+  "expected ctc": ""
+  "salary expectation": ""
+
+cover_letter_template: |
+  Hi {company} team,
+
+  I'm applying for the {title} role. I have {years}+ years of hands-on
+  experience as a DBA working with {top_skills}, covering day-to-day
+  administration, backup and recovery, and performance tuning.
+  I'd welcome the chance to do the same for {company}.
+
+  Thanks for your time,
+  {first_name} {last_name}

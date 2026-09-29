@@ -1,0 +1,6 @@
+{"jobs": [{"id": "f00-1", "title": "Database Engineer", "location": "Chennai, Tamil Nadu", "isRemote": false, "isListed": true,
+  "descriptionPlain": "Own our MySQL and PostgreSQL fleet. Performance tuning, query optimization, replication, backups. 1-3 years experience.",
+  "jobUrl": "https://jobs.ashbyhq.com/initech/f00-1", "applyUrl": "https://jobs.ashbyhq.com/initech/f00-1/application",
+  "publishedAt": "2026-09-25T00:00:00Z",
+  "compensation": {"summaryComponents": [{"compensationType": "Salary", "currencyCode": "USD", "minValue": 15000, "maxValue": 25000}]}},
+  {"id": "f00-2", "title": "Hidden", "isListed": false, "jobUrl": "x"}]}

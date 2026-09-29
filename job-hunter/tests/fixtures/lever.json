@@ -1,0 +1,5 @@
+[{"id": "abc-123", "text": "Senior Oracle DBA", "hostedUrl": "https://jobs.lever.co/globex/abc-123",
+  "applyUrl": "https://jobs.lever.co/globex/abc-123/apply", "categories": {"location": "Chennai", "commitment": "Full-time"},
+  "workplaceType": "onsite", "descriptionPlain": "Join our database team.",
+  "lists": [{"text": "Requirements", "content": "<li>Oracle 19c, RAC, Data Guard</li><li>RMAN backup and recovery</li><li>5-8 years experience</li>"}],
+  "additionalPlain": "", "createdAt": 1758000000000, "salaryRange": {"min": 20000, "max": 35000, "currency": "USD"}}]

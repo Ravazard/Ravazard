@@ -1,0 +1,11 @@
+{"jobs": [
+  {"id": 101, "title": "Database Administrator (PostgreSQL)", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/101",
+   "company_name": "Acme", "location": {"name": "Bengaluru, Karnataka, India"}, "updated_at": "2026-09-20T10:00:00Z",
+   "content": "&lt;p&gt;Manage &lt;strong&gt;PostgreSQL&lt;/strong&gt; and MySQL clusters: backup and recovery, replication, performance tuning. 2+ years of experience. Linux and shell scripting a plus.&lt;/p&gt;"},
+  {"id": 102, "title": "Principal Database Architect", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/102",
+   "company_name": "Acme", "location": {"name": "Chennai, India"}, "content": "&lt;p&gt;Oracle expert, 12+ years.&lt;/p&gt;"},
+  {"id": 103, "title": "Account Executive", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/103",
+   "company_name": "Acme", "location": {"name": "Bangalore"}, "content": "&lt;p&gt;Sell things. Salesforce.&lt;/p&gt;"},
+  {"id": 104, "title": "SQL Server DBA", "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/104",
+   "company_name": "Acme", "location": {"name": "Berlin, Germany"}, "content": "&lt;p&gt;SQL Server, T-SQL.&lt;/p&gt;"}
+]}

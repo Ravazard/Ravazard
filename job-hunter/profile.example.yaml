@@ -1,0 +1,78 @@
+# Copy this file to profile.yaml and fill it in with YOUR details.
+# profile.yaml is git-ignored so your personal info never gets committed.
+
+personal:
+  first_name: Your
+  last_name: Name
+  email: you@example.com
+  phone: "+1 555 000 0000"
+  location: "Your City, Country"
+  linkedin: "https://www.linkedin.com/in/your-handle"
+  github: "https://github.com/Ravazard"
+  website: ""
+  resume_path: "./resume.pdf"         # PDF uploaded to every application
+  current_company: ""
+  years_experience: 2
+  work_authorization: "Describe your work authorization here"
+  requires_sponsorship: false
+
+# What you're looking for ----------------------------------------------------
+search:
+  titles:                              # job titles to target (fuzzy matched)
+    - Software Engineer
+    - Backend Engineer
+    - C++ Developer
+    - Algorithm Engineer
+  keywords: ["c++", "software engineer"]   # used as search terms on keyword-based boards
+  remote_only: false
+  locations: ["Remote", "Your City"]
+  min_salary_usd: 0                    # 0 = don't filter on salary
+  exclude_title_keywords: ["principal", "staff", "director", "manager", "intern"]
+  exclude_keywords: ["security clearance", "ts/sci"]
+  exclude_companies: []
+
+# Your skills. "core" skills count double when scoring.
+skills:
+  core: ["C++", "Algorithms", "Data Structures", "Competitive Programming"]
+  other: ["Python", "Git", "Linux", "SQL", "STL", "Problem Solving"]
+
+# Where to look. Greenhouse / Lever / Ashby list company *board tokens*,
+# i.e. the slug in boards.greenhouse.io/<token>, jobs.lever.co/<token>,
+# jobs.ashbyhq.com/<token>.
+sources:
+  greenhouse: ["stripe", "databricks", "cloudflare"]
+  lever: ["palantir"]
+  ashby: ["ramp", "notion"]
+  remotive: true                       # public remote-jobs API (keyword search)
+  remoteok: false
+
+# How aggressive the auto-apply should be -------------------------------------
+apply:
+  min_score: 60                        # only jobs scoring >= this get queued
+  auto_approve: false                  # false = you approve each job with `approve`
+  dry_run: true                        # true = fill forms + screenshot, but DON'T submit
+  max_per_run: 10                      # hard cap on submissions per `apply` run
+  headless: true
+  use_llm_for_cover_letter: false      # needs ANTHROPIC_API_KEY
+  use_llm_for_questions: false         # let Claude draft answers to unknown questions
+
+# Canned answers for screening questions. Keys are matched (case-insensitive
+# substring) against the question label on the form.
+answers:
+  "how did you hear": "Company careers page"
+  "sponsorship": "No"
+  "authorized to work": "Yes"
+  "willing to relocate": "Yes"
+  "notice period": "30 days"
+  "pronouns": ""
+  "salary expectation": "Open to discussing"
+
+cover_letter_template: |
+  Hi {company} team,
+
+  I'm excited to apply for the {title} role. I have {years} years of
+  experience with {top_skills}, and a strong background in algorithms from
+  competitive programming. I'd love to bring that to {company}.
+
+  Thanks for your consideration,
+  {first_name} {last_name}
