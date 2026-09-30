@@ -31,6 +31,11 @@ class DigestError(RuntimeError):
 
 
 def smtp_password(user: str) -> str:
+    # Gmail shows app passwords as "abcd efgh ijkl mnop"; the spaces aren't part of it.
+    return "".join(_raw_password(user).split())
+
+
+def _raw_password(user: str) -> str:
     if pw := os.environ.get("JOBHUNTER_SMTP_PASSWORD"):
         return pw.strip()
     if sys.platform == "darwin":
@@ -136,5 +141,13 @@ def send_email(profile: Profile, subject: str, text: str, html_body: str) -> Non
     msg.add_alternative(html_body, subtype="html")
     with smtplib.SMTP(n.smtp_host, n.smtp_port, timeout=60) as smtp:
         smtp.starttls()
-        smtp.login(user, smtp_password(user))
+        try:
+            smtp.login(user, smtp_password(user))
+        except smtplib.SMTPAuthenticationError as exc:
+            raise DigestError(
+                f"Gmail rejected the login for {user} ({exc.smtp_code}). Use a 16-letter app password "
+                "from https://myaccount.google.com/apppasswords, not your normal Gmail password. "
+                f"Re-save it with:\n  security add-generic-password -U -a {user} -s {KEYCHAIN_SERVICE} "
+                "-T /usr/bin/security -w"
+            ) from exc
         smtp.send_message(msg)

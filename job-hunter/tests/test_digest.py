@@ -31,7 +31,9 @@ class FakeSMTP:
         pass
 
     def login(self, user, password):
-        assert password == "app-password-123"
+        if password != "app-password-123":
+            import smtplib
+            raise smtplib.SMTPAuthenticationError(535, b"5.7.8 Username and Password not accepted")
         self.user = user
 
     def send_message(self, msg):
@@ -46,7 +48,7 @@ def setup(tmp_path, monkeypatch):
     prof.write_text(yaml.safe_dump(data))
     monkeypatch.setattr(sources, "http_get_json", fake_fetch)
     monkeypatch.setattr(digest.smtplib, "SMTP", FakeSMTP)
-    monkeypatch.setenv("JOBHUNTER_SMTP_PASSWORD", "app-password-123")
+    monkeypatch.setenv("JOBHUNTER_SMTP_PASSWORD", " app-pass word-123 ")
     FakeSMTP.sent = []
     return ["--profile", str(prof), "--db", str(tmp_path / "jobs.db")]
 
@@ -92,3 +94,12 @@ def test_missing_password_is_reported(tmp_path, monkeypatch, capsys):
     main(base + ["search"])
     assert main(base + ["digest"]) == 1
     assert "security add-generic-password" in capsys.readouterr().err
+
+
+def test_rejected_password_gives_clear_advice(tmp_path, monkeypatch, capsys):
+    base = setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("JOBHUNTER_SMTP_PASSWORD", "my-normal-gmail-password")
+    main(base + ["search"])
+    assert main(base + ["digest"]) == 1
+    err = capsys.readouterr().err
+    assert "app password" in err and "add-generic-password -U" in err
