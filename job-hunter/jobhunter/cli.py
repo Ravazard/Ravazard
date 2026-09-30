@@ -342,6 +342,27 @@ def cmd_set_email_password(args, profile: Profile, store: Store) -> int:
     return 0
 
 
+def cmd_skills_report(args, profile: Profile, store: Store) -> int:
+    from jobhunter.report import database_jobs, skill_counts
+
+    jobs = database_jobs(store.by_status(*Status), profile, args.max_years)
+    if not jobs:
+        print("No database job postings collected yet. Run `search` for a few days first.")
+        return 0
+    print(f"Skills mentioned in {len(jobs)} database job postings"
+          + (f" asking for at most {args.max_years} years" if args.max_years is not None else "")
+          + " (all locations):\n")
+    print(f"{'skill':<36} {'postings':>8}  {'share':>5}  on your profile?")
+    for r in skill_counts(jobs, profile):
+        if r.count == 0:
+            continue
+        bar = "#" * round(r.share * 20)
+        print(f"{r.skill:<36} {r.count:>8}  {r.share:>5.0%}  {'yes' if r.yours else '-- gap':<8} {bar}")
+    if len(jobs) < 30:
+        print(f"\nOnly {len(jobs)} postings so far; treat this as a rough signal until more collect.")
+    return 0
+
+
 def cmd_stats(args, profile: Profile, store: Store) -> int:
     counts = store.counts()
     for s in Status:
@@ -399,6 +420,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--log", default="search.log", help="include the tail of this log file")
     sp.add_argument("--preview", metavar="FILE.html", help="write the email to a file instead of sending")
     sp.add_argument("--skip-empty", action="store_true", help="don't send when there are no new matches")
+
+    sp = sub.add_parser("skills-report", help="which skills database job postings ask for")
+    sp.add_argument("--max-years", type=int, default=None,
+                    help="only postings asking for at most this many years (e.g. 4)")
 
     sub.add_parser("set-email-password", help="save and test the Gmail app password for digest")
 

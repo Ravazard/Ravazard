@@ -251,3 +251,25 @@ def test_cli_search_list_approve(tmp_path, monkeypatch, capsys, profile):
     store = Store(db)
     approved = store.by_status(Status.APPROVED)
     assert {j.key for j in approved} == {"greenhouse:acme/101", "ashby:initech/f00-1"}
+
+
+def test_skills_report(tmp_path, monkeypatch, capsys):
+    data = yaml.safe_load((ROOT / "profile.dba.example.yaml").read_text())
+    data["sources"] = {"greenhouse": ["acme"], "lever": ["globex"], "ashby": ["initech"]}
+    prof = tmp_path / "profile.yaml"
+    prof.write_text(yaml.safe_dump(data))
+    monkeypatch.setattr(sources, "http_get_json", fake_fetch)
+    base = ["--profile", str(prof), "--db", str(tmp_path / "jobs.db")]
+    main(base + ["search"])
+    capsys.readouterr()
+
+    assert main(base + ["skills-report"]) == 0
+    out = capsys.readouterr().out
+    # 5 database-titled postings in the fixtures (sales role excluded), any location/status.
+    assert "Skills mentioned in 5 database job postings" in out
+    assert "Oracle" in out and "-- gap" in out            # Oracle isn't on the profile
+    assert "Replication" in out and "yes" in out
+
+    assert main(base + ["skills-report", "--max-years", "4"]) == 0
+    out = capsys.readouterr().out
+    assert "in 3 database job postings asking for at most 4 years" in out   # drops 5-8 and 12+ yrs
