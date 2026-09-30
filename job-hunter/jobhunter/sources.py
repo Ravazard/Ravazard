@@ -26,8 +26,24 @@ TIMEOUT = 30
 Fetcher = Callable[[str], object]
 
 
+def _session() -> requests.Session:
+    """A session that retries timeouts, 429s and 5xx errors twice, with backoff."""
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+
+    retry = Retry(total=2, connect=2, read=2, backoff_factor=2,
+                  status_forcelist=(429, 500, 502, 503, 504), allowed_methods=("GET",))
+    s = requests.Session()
+    s.mount("https://", HTTPAdapter(max_retries=retry, pool_maxsize=16))
+    s.headers["User-Agent"] = USER_AGENT
+    return s
+
+
+_SESSION = _session()
+
+
 def http_get_json(url: str) -> object:
-    resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
+    resp = _SESSION.get(url, timeout=TIMEOUT)
     resp.raise_for_status()
     return resp.json()
 
