@@ -62,6 +62,15 @@ def location_matches(job_location: str, wanted: list[str]) -> bool:
     return False
 
 
+_VAGUE_LOCATIONS = {"", "hybrid", "in-office", "in office", "onsite", "on-site", "office",
+                     "multiple locations", "various locations", "flexible"}
+
+
+def _vague_location(location: str) -> bool:
+    """True when the location field names no place, so the cities must be in the description."""
+    return location.strip().lower() in _VAGUE_LOCATIONS
+
+
 TITLE_SYNONYMS = {
     "dba": "database administrator",
     "db": "database",
@@ -156,7 +165,11 @@ def score_job(job: Job, profile: Profile) -> Match:
     if job.remote and not s.include_remote and not location_matches(job.location, s.locations):
         return Match(0, ["remote job, but include_remote is off"], True)
     if s.locations and not (job.remote and s.include_remote):
-        if not location_matches(job.location, s.locations):
+        where = job.location
+        if _vague_location(where):
+            # e.g. Cloudflare says "Hybrid" and lists the cities in the description.
+            where = job.description[:3000]
+        if not location_matches(where, s.locations):
             return Match(0, [f"location '{job.location}' not in your locations"], True)
     if s.min_salary_usd and job.salary_max and job.salary_max < s.min_salary_usd:
         return Match(0, [f"max salary {job.salary_max} < your minimum {s.min_salary_usd}"], True)

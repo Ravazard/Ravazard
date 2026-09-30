@@ -120,6 +120,15 @@ def test_real_false_positives_rejected(profile):
         assert not score_job(_job(title, desc, "Bengaluru, India"), profile).excluded, title
 
 
+def test_vague_location_uses_description(profile):
+    desc = "Available Locations: Bengaluru, India or London, UK. We run MySQL. Linux."
+    assert not score_job(_job("Database Engineer", desc, "Hybrid"), profile).excluded
+    desc = "Available Locations: London, UK. We run MySQL. Linux."
+    assert score_job(_job("Database Engineer", desc, "In-Office"), profile).excluded
+    # A real city in the location field still wins over the description.
+    assert score_job(_job("Database Engineer", "Bengaluru team. MySQL.", "Seattle, WA"), profile).excluded
+
+
 def test_generic_title_words_count_less():
     assert title_similarity("Site Reliability Engineer", ["Database Reliability Engineer"]) < 0.5
     assert title_similarity("Database Reliability Engineer", ["Database Reliability Engineer"]) == 1.0
