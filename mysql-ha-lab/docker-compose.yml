@@ -1,0 +1,68 @@
+# MySQL HA lab: 1 primary + 2 replicas (GTID), ProxySQL for read/write split,
+# Orchestrator for automatic failover.  Start it with:  ./lab.sh up
+#
+# Lab-only passwords live in .env. Never reuse them anywhere real.
+
+x-mysql: &mysql
+  image: mysql:8.0
+  # A CLONE finishes by shutting mysqld down; this brings the container back.
+  # (`docker compose stop`, used by ./lab.sh kill-primary, still keeps it down.)
+  restart: unless-stopped
+  environment:
+    MYSQL_ROOT_PASSWORD: ${ROOT_PASSWORD}
+  volumes:
+    - ./conf/mysql.cnf:/etc/mysql/conf.d/lab.cnf:ro
+  healthcheck:
+    test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${ROOT_PASSWORD}"]
+    interval: 3s
+    timeout: 3s
+    retries: 40
+  networks: [lab]
+
+services:
+  mysql1:
+    <<: *mysql
+    hostname: mysql1
+    command: ["--server-id=1", "--report-host=mysql1"]
+    ports: ["33061:3306"]
+
+  mysql2:
+    <<: *mysql
+    hostname: mysql2
+    command: ["--server-id=2", "--report-host=mysql2"]
+    ports: ["33062:3306"]
+
+  mysql3:
+    <<: *mysql
+    hostname: mysql3
+    command: ["--server-id=3", "--report-host=mysql3"]
+    ports: ["33063:3306"]
+
+  proxysql:
+    image: proxysql/proxysql:${PROXYSQL_TAG}
+    platform: linux/amd64          # runs under emulation on Apple Silicon
+    hostname: proxysql
+    volumes:
+      - ./conf/proxysql.cnf:/etc/proxysql.cnf:ro
+    ports:
+      - "6033:6033"                # applications connect here
+      - "6032:6032"                # ProxySQL admin interface
+    depends_on:
+      mysql1: {condition: service_healthy}
+      mysql2: {condition: service_healthy}
+      mysql3: {condition: service_healthy}
+    networks: [lab]
+
+  orchestrator:
+    image: openarkcode/orchestrator:${ORCHESTRATOR_TAG}
+    platform: linux/amd64
+    hostname: orchestrator
+    volumes:
+      - ./conf/orchestrator.conf.json:/etc/orchestrator.conf.json:ro
+    ports: ["3000:3000"]           # web UI: http://localhost:3000
+    depends_on:
+      mysql1: {condition: service_healthy}
+    networks: [lab]
+
+networks:
+  lab: {}

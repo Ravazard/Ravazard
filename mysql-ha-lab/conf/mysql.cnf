@@ -1,0 +1,15 @@
+# Shared by all three nodes; server-id and report-host come from docker-compose.yml.
+[mysqld]
+gtid_mode                = ON
+enforce_gtid_consistency = ON
+log_bin                  = mysql-bin
+log_replica_updates      = ON
+relay_log_recovery       = ON
+binlog_expire_logs_seconds = 604800
+innodb_buffer_pool_size  = 256M
+max_connections          = 200
+slow_query_log           = ON
+long_query_time          = 0.5
+
+# CLONE plugin: rebuild a replica from another node in one command (see EXERCISES.md)
+plugin-load-add          = mysql_clone.so

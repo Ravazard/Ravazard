@@ -1,0 +1,48 @@
+# ProxySQL reads this file only on first start (fresh container).
+datadir="/var/lib/proxysql"
+
+admin_variables =
+{
+    admin_credentials = "admin:admin;radmin:radmin"
+    mysql_ifaces      = "0.0.0.0:6032"
+}
+
+mysql_variables =
+{
+    threads                        = 2
+    interfaces                     = "0.0.0.0:6033"
+    server_version                 = "8.0.36"
+    monitor_username               = "monitor"
+    monitor_password               = "monitorpass"
+    monitor_read_only_interval     = 1000     # check read_only every second
+    monitor_read_only_timeout      = 800
+    monitor_replication_lag_interval = 1000
+    connect_timeout_server         = 3000
+}
+
+# Writer = hostgroup 10, readers = hostgroup 20. ProxySQL moves servers between
+# them by watching @@read_only, so after a failover the new primary becomes the
+# writer automatically.
+mysql_servers =
+(
+    { address = "mysql1", port = 3306, hostgroup = 10, max_replication_lag = 10 },
+    { address = "mysql2", port = 3306, hostgroup = 20, max_replication_lag = 10 },
+    { address = "mysql3", port = 3306, hostgroup = 20, max_replication_lag = 10 }
+)
+
+mysql_replication_hostgroups =
+(
+    { writer_hostgroup = 10, reader_hostgroup = 20, check_type = "read_only", comment = "lab" }
+)
+
+mysql_users =
+(
+    { username = "app", password = "apppass", default_hostgroup = 10, active = 1 }
+)
+
+# Read/write split: SELECT ... FOR UPDATE and writes -> primary, other SELECTs -> replicas.
+mysql_query_rules =
+(
+    { rule_id = 1, active = 1, match_digest = "^SELECT .* FOR UPDATE", destination_hostgroup = 10, apply = 1 },
+    { rule_id = 2, active = 1, match_digest = "^SELECT",               destination_hostgroup = 20, apply = 1 }
+)

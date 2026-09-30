@@ -1,0 +1,34 @@
+{
+  "Debug": false,
+  "ListenAddress": ":3000",
+
+  "BackendDB": "sqlite",
+  "SQLite3DataFile": "/tmp/orchestrator.sqlite3",
+
+  "MySQLTopologyUser": "orchestrator",
+  "MySQLTopologyPassword": "orcpass",
+  "MySQLConnectTimeoutSeconds": 1,
+  "DefaultInstancePort": 3306,
+  "DiscoverByShowSlaveHosts": false,
+  "InstancePollSeconds": 2,
+  "HostnameResolveMethod": "none",
+  "MySQLHostnameResolveMethod": "@@hostname",
+
+  "FailureDetectionPeriodBlockMinutes": 1,
+  "RecoveryPeriodBlockSeconds": 30,
+  "RecoveryIgnoreHostnameFilters": [],
+  "RecoverMasterClusterFilters": ["*"],
+  "RecoverIntermediateMasterClusterFilters": ["*"],
+  "ApplyMySQLPromotionAfterMasterFailover": true,
+  "PreventCrossDataCenterMasterFailover": false,
+  "DelayMasterPromotionIfSQLThreadNotUpToDate": true,
+  "MasterFailoverDetachReplicaMasterHost": false,
+  "DetachLostReplicasAfterMasterFailover": true,
+
+  "OnFailureDetectionProcesses": [
+    "echo 'Detected {failureType} on {failureCluster}. Failed: {failedHost}' >> /tmp/recovery.log"
+  ],
+  "PostMasterFailoverProcesses": [
+    "echo 'Promoted {successorHost} after {failedHost} died' >> /tmp/recovery.log"
+  ]
+}
