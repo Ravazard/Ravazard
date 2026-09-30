@@ -47,6 +47,7 @@ class Skills(BaseModel):
     core: list[str] = Field(default_factory=list)    # strongest skills, weight 2
     other: list[str] = Field(default_factory=list)   # solid working knowledge, weight 1
     basic: list[str] = Field(default_factory=list)   # familiarity only, weight 0.5
+    avoid: list[str] = Field(default_factory=list)   # tech you don't want; -12 points each
 
 
 class Sources(BaseModel):

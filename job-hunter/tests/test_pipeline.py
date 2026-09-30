@@ -130,6 +130,20 @@ def test_real_false_positives_rejected(profile):
         assert not score_job(_job(title, desc, "Bengaluru, India"), profile).excluded, title
 
 
+def test_avoided_databases_sink_the_score(profile):
+    # Real Brillio posting: L1 support across SQL Server / Azure SQL / Postgres / Oracle,
+    # with MySQL only as "preferred". It used to score 92.
+    desc = ("2 - 4 years of experience in operational database support across SQL Server, "
+            "Azure SQL, PostgreSQL, and Oracle platforms. Backup and restore, replication health, "
+            "failover, performance tuning, high availability. Preferred: MongoDB, MySQL, or Informix DBA experience.")
+    m = score_job(_job("Tech Specialist, Database & Middleware", desc, "Bangalore, Karnataka, India"), profile)
+    assert m.score < profile.apply.min_score, m
+    assert any("avoid list" in r for r in m.reasons)
+    # A MySQL job that merely mentions Oracle once stays a strong match.
+    desc = "MySQL and MariaDB DBA. Replication, backups, Linux, bash. Oracle exposure a plus. 2+ years."
+    assert score_job(_job("MySQL DBA", desc, "Chennai"), profile).score >= profile.apply.min_score + 15
+
+
 def test_vague_location_uses_description(profile):
     desc = "Available Locations: Bengaluru, India or London, UK. We run MySQL. Linux."
     assert not score_job(_job("Database Engineer", desc, "Hybrid"), profile).excluded

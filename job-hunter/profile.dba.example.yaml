@@ -60,6 +60,9 @@ skills:
           # Claude uses this list when answering screening questions.
           "Replication", "Backup and Recovery", "Performance Tuning", "High Availability"]
   basic: ["MongoDB", "ArangoDB"]                   # basic knowledge
+  # Proprietary databases you don't want to work with. Each one a posting
+  # mentions costs 12 points, so jobs built around them drop below min_score.
+  avoid: ["Oracle", "SQL Server", "Azure SQL", "DB2", "Sybase", "Teradata", "Informix"]
 
 # Companies whose careers pages run on Greenhouse / Lever / Ashby and that have
 # offices in Bengaluru or Chennai. These are STARTING POINTS, not a vetted

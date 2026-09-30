@@ -34,6 +34,7 @@ ALIASES: dict[str, list[str]] = {
     "mongodb": ["mongo"],
     "arangodb": ["arango"],
     "sql server": ["mssql", "ms sql", "microsoft sql server"],
+    "azure sql": ["azure sql database", "azure sql managed instance"],
     "oracle": ["oracle 19c", "oracle 12c", "oracle db", "oracle database"],
     "backup and recovery": ["backup & recovery", "backups", "rman", "point-in-time recovery"],
     "performance tuning": ["query optimization", "query tuning", "sql tuning"],
@@ -205,6 +206,12 @@ def score_job(job: Job, profile: Profile) -> Match:
         target = max(4, 0.5 * sum(weights.values()))
         score += 40 * min(1.0, got / target)
     reasons.append("skills: " + (", ".join(matched) if matched else "none matched"))
+
+    # Technologies you don't want to work with cost 12 points each.
+    avoided = [sk for sk in profile.skills.avoid if has_term(text, sk)]
+    if avoided:
+        score -= 12 * len(avoided)
+        reasons.append("mentions " + ", ".join(avoided) + " (on your avoid list)")
 
     # ---- location ------------------------------------------------------------
     score += 15
