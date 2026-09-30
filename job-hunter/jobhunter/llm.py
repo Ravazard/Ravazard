@@ -58,7 +58,7 @@ def _client():
 
 
 def _profile_block(profile: Profile) -> str:
-    p = profile.model_dump(exclude={"base_dir", "sources", "apply", "cover_letter_template"})
+    p = profile.model_dump(exclude={"base_dir", "sources", "apply", "notify", "cover_letter_template"})
     # Contact details aren't needed for reasoning about fit.
     for k in ("email", "phone", "resume_path"):
         p["personal"].pop(k, None)

@@ -287,6 +287,29 @@ def cmd_check_boards(args, profile: Profile, store: Store) -> int:
     return 0
 
 
+def cmd_digest(args, profile: Profile, store: Store) -> int:
+    from jobhunter.digest import build_digest, send_email
+
+    log = Path(args.log) if args.log else None
+    subject, text, body, keys = build_digest(store, profile, log)
+    if args.preview:
+        out = Path(args.preview)
+        out.write_text(body)
+        print(f"{subject}\nPreview written to {out} (nothing sent).")
+        return 0
+    if args.skip_empty and not keys:
+        print("No new matches; not sending.")
+        return 0
+    try:
+        send_email(profile, subject, text, body)
+    except Exception as exc:  # noqa: BLE001 - report any SMTP failure plainly
+        print(f"Couldn't send the digest: {exc}", file=sys.stderr)
+        return 1
+    store.mark_emailed(keys)
+    print(f"Sent '{subject}' to {profile.notify.email_to}")
+    return 0
+
+
 def cmd_stats(args, profile: Profile, store: Store) -> int:
     counts = store.counts()
     for s in Status:
@@ -339,6 +362,11 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--llm", action="store_true")
 
     sub.add_parser("stats", help="counts by status")
+
+    sp = sub.add_parser("digest", help="email new matches (with full job descriptions) to you")
+    sp.add_argument("--log", default="search.log", help="include the tail of this log file")
+    sp.add_argument("--preview", metavar="FILE.html", help="write the email to a file instead of sending")
+    sp.add_argument("--skip-empty", action="store_true", help="don't send when there are no new matches")
 
     sp = sub.add_parser("check-boards", help="test company board names and keep the working ones")
     sp.add_argument("--file", default=str(HERE / "companies" / "india.yaml"),

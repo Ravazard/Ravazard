@@ -49,6 +49,10 @@ class Store:
         self.db = sqlite3.connect(str(path))
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        cols = {r["name"] for r in self.db.execute("PRAGMA table_info(jobs)")}
+        if "emailed_at" not in cols:                     # added after the first release
+            self.db.execute("ALTER TABLE jobs ADD COLUMN emailed_at TEXT")
+            self.db.commit()
 
     def close(self) -> None:
         self.db.close()
@@ -103,6 +107,28 @@ class Store:
     def note(self, key: str) -> str:
         row = self.db.execute("SELECT note FROM jobs WHERE key=?", (key,)).fetchone()
         return row["note"] if row else ""
+
+    def not_emailed(self, *statuses: Status) -> list[Job]:
+        marks = ",".join("?" for _ in statuses)
+        rows = self.db.execute(
+            f"SELECT * FROM jobs WHERE status IN ({marks}) AND emailed_at IS NULL "
+            "ORDER BY score DESC, first_seen DESC", [st.value for st in statuses]).fetchall()
+        return [self._row_to_job(r) for r in rows]
+
+    def mark_emailed(self, keys: list[str]) -> None:
+        now = _now()
+        self.db.executemany("UPDATE jobs SET emailed_at=? WHERE key=?", [(now, k) for k in keys])
+        self.db.commit()
+
+    def changed_since(self, since: str, *statuses: Status) -> list[Job]:
+        marks = ",".join("?" for _ in statuses)
+        rows = self.db.execute(
+            f"SELECT * FROM jobs WHERE status IN ({marks}) AND updated_at >= ? ORDER BY updated_at DESC",
+            [st.value for st in statuses] + [since]).fetchall()
+        return [self._row_to_job(r) for r in rows]
+
+    def seen_since(self, since: str) -> int:
+        return self.db.execute("SELECT COUNT(*) n FROM jobs WHERE first_seen >= ?", (since,)).fetchone()["n"]
 
     def counts(self) -> dict[str, int]:
         rows = self.db.execute("SELECT status, COUNT(*) n FROM jobs GROUP BY status").fetchall()

@@ -87,6 +87,13 @@ apply:
   use_llm_for_cover_letter: false
   use_llm_for_questions: false
 
+# Nightly email digest (`python -m jobhunter digest`). The Gmail app password
+# is NOT stored here; see "Nightly email" in README.md.
+notify:
+  email_to: ""                         # e.g. you@gmail.com
+  smtp_host: smtp.gmail.com
+  smtp_port: 587
+
 answers:
   "how did you hear": "Company careers page"
   "sponsorship": "No"

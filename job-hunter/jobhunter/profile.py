@@ -68,12 +68,21 @@ class ApplySettings(BaseModel):
     use_llm_for_questions: bool = False
 
 
+class Notify(BaseModel):
+    email_to: str = ""                   # where the nightly digest goes
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""                  # defaults to email_to
+    max_description_chars: int = 6000    # per job, in the email
+
+
 class Profile(BaseModel):
     personal: Personal
     search: Search = Field(default_factory=Search)
     skills: Skills = Field(default_factory=Skills)
     sources: Sources = Field(default_factory=Sources)
     apply: ApplySettings = Field(default_factory=ApplySettings)
+    notify: Notify = Field(default_factory=Notify)
     answers: dict[str, str] = Field(default_factory=dict)
     cover_letter_template: str = ""
 

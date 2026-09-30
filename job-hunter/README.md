@@ -78,6 +78,30 @@ run it on a schedule:
 
 `max_per_run` caps how many applications go out per run.
 
+## Nightly email
+
+`digest` emails you every new match, with its full job description, score, reasons and
+the exact `approve` command. It also includes the tail of `search.log`. Each job is
+emailed once.
+
+1. Turn on 2-Step Verification for your Google account, then create an app password at
+   https://myaccount.google.com/apppasswords (16 letters).
+2. Save it in the macOS Keychain. It's never written to profile.yaml:
+   ```bash
+   security add-generic-password -a you@gmail.com -s jobhunter-smtp -T /usr/bin/security -w
+   ```
+   (Other systems: put it in `~/.config/jobhunter/smtp_password` with `chmod 600`, or set
+   `JOBHUNTER_SMTP_PASSWORD`.)
+3. Set `notify.email_to` in profile.yaml, then try it:
+   ```bash
+   python -m jobhunter digest --preview digest.html   # look at it first
+   python -m jobhunter digest                          # send it
+   ```
+4. Every night at 9 pm, search and then email:
+   ```cron
+   0 21 * * * cd ~/job-hunter && .venv/bin/python -m jobhunter search >> search.log 2>&1; .venv/bin/python -m jobhunter digest >> search.log 2>&1
+   ```
+
 ## Adding companies
 
 The quickest way is to let the tool test a list of candidates and keep the ones that work:
