@@ -1,3 +1,4 @@
+# Needs Python 3.10+ (macOS ships 3.9: install a newer one from python.org).
 requests>=2.31
 PyYAML>=6.0
 pydantic>=2.6

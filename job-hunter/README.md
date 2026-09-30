@@ -20,8 +20,13 @@ search  ->  score  ->  you approve  ->  fill form (dry run)  ->  --submit
 
 ## Setup
 
+Needs **Python 3.10 or newer**. macOS comes with 3.9, so install a newer
+version from [python.org](https://www.python.org/downloads/) first.
+
 ```bash
 cd job-hunter
+python3.13 -m venv .venv          # use the version you installed, e.g. python3.12
+source .venv/bin/activate
 pip install -r requirements.txt
 playwright install chromium
 
