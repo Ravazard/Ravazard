@@ -54,10 +54,11 @@ search:
 skills:
   core: ["MySQL", "MariaDB"]                       # excellent
   other: ["PostgreSQL", "Linux", "Shell Scripting", # intermediate / good working knowledge
+          "Automation", "Monitoring", "Alerting", "Prometheus", "Grafana",
           # Typical MySQL DBA duties. Keep only the ones you've actually done;
           # Claude uses this list when answering screening questions.
           "Replication", "Backup and Recovery", "Performance Tuning", "High Availability"]
-  basic: ["MongoDB", "ArangoDB"]                   # basic knowledge
+  basic: ["MongoDB", "ArangoDB", "Python"]         # basic knowledge
 
 # Companies whose careers pages run on Greenhouse / Lever / Ashby and that have
 # offices in Bengaluru or Chennai. These are STARTING POINTS, not a vetted

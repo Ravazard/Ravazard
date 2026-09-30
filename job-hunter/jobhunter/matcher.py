@@ -39,6 +39,11 @@ ALIASES: dict[str, list[str]] = {
     "performance tuning": ["query optimization", "query tuning", "sql tuning"],
     "high availability": ["ha", "always on", "data guard", "rac", "failover"],
     "shell scripting": ["bash", "shell script"],
+    "monitoring": ["observability"],
+    "alerting": ["alerts", "alertmanager", "pagerduty", "on-call", "oncall"],
+    "automation": ["automate", "automated", "automating"],
+    "grafana": ["grafana dashboards"],
+    "prometheus": ["mysqld_exporter", "node_exporter"],
     "kubernetes": ["k8s"],
     "machine learning": ["ml"],
 }
