@@ -59,11 +59,18 @@ def _raw_password(user: str) -> str:
 def normalize_app_password(raw: str) -> str:
     """Strip every kind of space; raise if what's left isn't a 16-letter Gmail app password."""
     pw = "".join(raw.split()).replace(" ", "")
-    if len(pw) != 16 or not pw.isalpha():
+    if len(pw) != 16:
         raise DigestError(
             f"That's {len(pw)} characters. A Gmail app password is exactly 16 letters "
             "(shown as 'abcd efgh ijkl mnop'). Your normal Gmail password won't work. "
             "Create one at https://myaccount.google.com/apppasswords"
+        )
+    odd = [(i + 1, c) for i, c in enumerate(pw) if not ("a" <= c.lower() <= "z")]
+    if odd:
+        where = ", ".join(f"position {i} is '{'digit' if c.isdigit() else 'symbol'}'" for i, c in odd)
+        raise DigestError(
+            f"16 characters, but {where}. App passwords are letters a-z only; "
+            "check for 1 typed instead of l, or 0 instead of o. Copy-paste it rather than typing."
         )
     return pw.lower()
 

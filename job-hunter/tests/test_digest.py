@@ -112,6 +112,8 @@ def test_normalize_app_password():
     assert digest.normalize_app_password(" ABCD EFGH\tIJKL MNOP\n") == "abcdefghijklmnop"
     with pytest.raises(digest.DigestError, match="17 characters"):
         digest.normalize_app_password("MyNormalPass2024!")   # a regular password
+    with pytest.raises(digest.DigestError, match=r"position 3 is 'digit'.*1 typed instead of l"):
+        digest.normalize_app_password("ab1d efgh ijkl mnop")
 
 
 def test_set_email_password_saves_and_tests(tmp_path, monkeypatch, capsys):
