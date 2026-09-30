@@ -44,6 +44,10 @@ ALIASES: dict[str, list[str]] = {
     "automation": ["automate", "automated", "automating"],
     "grafana": ["grafana dashboards"],
     "prometheus": ["mysqld_exporter", "node_exporter"],
+    "aws rds": ["rds", "amazon rds", "aurora", "aws aurora"],
+    "percona xtrabackup": ["xtrabackup", "mariabackup"],
+    "gtid": ["gtid-based replication", "gtid replication"],
+    "terraform": ["infrastructure as code", "iac"],
     "kubernetes": ["k8s"],
     "machine learning": ["ml"],
 }
