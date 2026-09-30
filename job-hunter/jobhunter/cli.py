@@ -210,6 +210,83 @@ def cmd_run(args, profile: Profile, store: Store) -> int:
     return cmd_apply(args, profile, store)
 
 
+def _replace_sources_block(text: str, sources: dict[str, list[str]], remotive: bool, remoteok: bool) -> str:
+    """Swap the `sources:` section of profile.yaml, leaving everything else (and comments) alone."""
+    import re
+    from datetime import date
+
+    def flow(xs: list[str]) -> str:
+        return "[" + ", ".join(f'"{x}"' for x in xs) + "]"
+
+    new = (
+        f"sources:   # written by `check-boards` on {date.today().isoformat()}\n"
+        f"  greenhouse: {flow(sources['greenhouse'])}\n"
+        f"  lever: {flow(sources['lever'])}\n"
+        f"  ashby: {flow(sources['ashby'])}\n"
+        f"  remotive: {str(remotive).lower()}\n"
+        f"  remoteok: {str(remoteok).lower()}\n"
+    )
+    # The block runs from "sources:" to the next top-level key; drop comments
+    # that sit directly above that key so they stay with it.
+    pattern = re.compile(r"^sources:.*\n(?:(?:[ \t].*|[ \t]*)\n)*", re.M)
+    if not pattern.search(text):
+        return text.rstrip("\n") + "\n\n" + new
+    return pattern.sub(lambda _: new + "\n", text, count=1)
+
+
+def cmd_check_boards(args, profile: Profile, store: Store) -> int:
+    from concurrent.futures import ThreadPoolExecutor
+
+    import yaml
+
+    from jobhunter.matcher import location_matches
+    from jobhunter.sources import probe_board
+
+    candidates: dict[str, list[str]] = {"greenhouse": [], "lever": [], "ashby": []}
+    for ats in candidates:                       # what's already in your profile
+        candidates[ats] += getattr(profile.sources, ats)
+    if args.file:
+        data = yaml.safe_load(Path(args.file).read_text()) or {}
+        for ats in candidates:
+            candidates[ats] += [str(s) for s in data.get(ats) or []]
+    pairs = [(ats, slug) for ats, slugs in candidates.items() for slug in dict.fromkeys(slugs)]
+    print(f"Checking {len(pairs)} company boards...\n")
+
+    places = profile.search.locations or ["India"]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(lambda p: (p, *probe_board(*p)), pairs))
+
+    working: dict[str, list[str]] = {"greenhouse": [], "lever": [], "ashby": []}
+    rows = []
+    for (ats, slug), jobs, err in results:
+        if jobs:                                 # an empty board can't be told apart from a wrong name
+            local = sum(1 for j in jobs if location_matches(j.location, places))
+            working[ats].append(slug)
+            rows.append((local, len(jobs), f"{ats}:{slug}"))
+        else:
+            rows.append((-1, 0, f"{ats}:{slug}  ({err or 'no open jobs'})"))
+
+    rows.sort(key=lambda r: (-r[0], -r[1]))
+    for local, total, name in rows:
+        if local >= 0:
+            print(f"  OK    {name:<50} {total:5d} jobs, {local:4d} in {'/'.join(places)}")
+    bad = [name for local, _, name in rows if local < 0]
+    if bad:
+        print(f"\n  {len(bad)} not found or empty (skipped): " + ", ".join(n.split()[0] for n in bad[:40])
+              + (" ..." if len(bad) > 40 else ""))
+
+    n = sum(len(v) for v in working.values())
+    print(f"\n{n} working boards.")
+    if not args.write:
+        print("Run again with --write to put them in profile.yaml.")
+        return 0
+    path = Path(args.profile)
+    path.write_text(_replace_sources_block(path.read_text(), working,
+                                           profile.sources.remotive, profile.sources.remoteok))
+    print(f"Updated the sources: section of {path}. Now run:  python -m jobhunter search")
+    return 0
+
+
 def cmd_stats(args, profile: Profile, store: Store) -> int:
     counts = store.counts()
     for s in Status:
@@ -262,6 +339,11 @@ def build_parser() -> argparse.ArgumentParser:
             sp.add_argument("--llm", action="store_true")
 
     sub.add_parser("stats", help="counts by status")
+
+    sp = sub.add_parser("check-boards", help="test company board names and keep the working ones")
+    sp.add_argument("--file", default=str(HERE / "companies" / "india.yaml"),
+                    help="YAML of candidate boards (default: companies/india.yaml)")
+    sp.add_argument("--write", action="store_true", help="save the working boards into profile.yaml")
     return p
 
 
@@ -278,6 +360,6 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     store = Store(args.db)
     try:
-        return globals()[f"cmd_{args.cmd}"](args, profile, store)
+        return globals()[f"cmd_{args.cmd.replace('-', '_')}"](args, profile, store)
     finally:
         store.close()

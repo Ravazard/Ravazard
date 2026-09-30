@@ -80,8 +80,15 @@ run it on a schedule:
 
 ## Adding companies
 
-List company slugs under `sources:` in `profile.yaml`. Open a company's
-careers page and click a job. If the URL looks like one of these, add the slug:
+The quickest way is to let the tool test a list of candidates and keep the ones that work:
+
+```bash
+python -m jobhunter check-boards            # test companies/india.yaml + your current list
+python -m jobhunter check-boards --write    # save the working ones into profile.yaml
+```
+
+`companies/india.yaml` holds ~270 Indian companies (unverified guesses; wrong names are
+skipped). To add one by hand, open its careers page and click a job. If the URL looks like one of these, add the slug:
 
 | URL | add under |
 |---|---|

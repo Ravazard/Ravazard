@@ -170,6 +170,40 @@ def test_store_dedupes(tmp_path, profile):
     assert store.get(job.key).status is Status.APPLIED
 
 
+def test_check_boards_writes_only_working(tmp_path, monkeypatch, capsys):
+    import requests
+
+    def fetch(url):
+        if "boards/acme/" in url or "boards/tekion/" in url:
+            return json.loads((FIX / "greenhouse.json").read_text())
+        if "postings/meesho" in url:
+            return json.loads((FIX / "lever.json").read_text())
+        if "job-board/emptyco" in url:
+            return {"jobs": []}
+        resp = requests.Response()
+        resp.status_code = 404
+        raise requests.HTTPError(response=resp)
+
+    monkeypatch.setattr(sources, "http_get_json", fetch)
+    prof = tmp_path / "profile.yaml"
+    prof.write_text((ROOT / "profile.dba.example.yaml").read_text())
+    cands = tmp_path / "c.yaml"
+    cands.write_text("greenhouse: [acme, tekion, nosuchco]\nlever: [meesho, ghost]\nashby: [emptyco]\n")
+
+    assert main(["--profile", str(prof), "--db", str(tmp_path / "j.db"),
+                 "check-boards", "--file", str(cands), "--write"]) == 0
+    out = capsys.readouterr().out
+    assert "OK    greenhouse:acme" in out and "nosuchco" in out and "3 working boards" in out
+
+    written = load_profile(prof)
+    assert written.sources.greenhouse == ["acme", "tekion"]
+    assert written.sources.lever == ["meesho"] and written.sources.ashby == []
+    # Everything outside sources: is untouched, comments included.
+    text = prof.read_text()
+    assert written.skills.core == ["MySQL", "MariaDB"] and "apply:" in text
+    assert "# Companies whose careers pages run on Greenhouse" in text
+
+
 def test_cli_search_list_approve(tmp_path, monkeypatch, capsys, profile):
     data = yaml.safe_load((ROOT / "profile.dba.example.yaml").read_text())
     data["sources"] = {"greenhouse": ["acme"], "lever": ["globex"], "ashby": ["initech"]}

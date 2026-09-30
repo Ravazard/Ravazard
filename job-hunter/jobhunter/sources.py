@@ -189,6 +189,24 @@ def remoteok(fetch: Fetcher = http_get_json) -> list[Job]:
     return jobs
 
 
+# --- checking board names ----------------------------------------------------
+
+BOARD_FETCHERS: dict[str, Callable[..., list[Job]]] = {
+    "greenhouse": greenhouse, "lever": lever, "ashby": ashby,
+}
+
+
+def probe_board(ats: str, slug: str, fetch: Fetcher | None = None) -> tuple[list[Job] | None, str]:
+    """Try one board. Returns (jobs, "") if it exists, or (None, error)."""
+    try:
+        return BOARD_FETCHERS[ats](slug, fetch or http_get_json), ""
+    except requests.HTTPError as exc:
+        code = exc.response.status_code if exc.response is not None else "?"
+        return None, f"HTTP {code}"
+    except Exception as exc:  # noqa: BLE001
+        return None, exc.__class__.__name__
+
+
 # --- orchestration -----------------------------------------------------------
 
 def fetch_all(profile: Profile, fetch: Fetcher | None = None) -> Iterable[Job]:
@@ -205,10 +223,19 @@ def fetch_all(profile: Profile, fetch: Fetcher | None = None) -> Iterable[Job]:
     if s.remoteok:
         tasks.append(("remoteok", lambda: remoteok(fetch)))
 
-    for name, task in tasks:
+    def run(task: Callable[[], list[Job]]) -> tuple[list[Job], Exception | None]:
         try:
-            found = task()
-            log.info("%-30s %4d jobs", name, len(found))
-            yield from found
+            return task(), None
         except Exception as exc:  # noqa: BLE001 - keep going on any source failure
-            log.warning("%-30s FAILED: %s", name, exc)
+            return [], exc
+
+    # Boards are fetched 8 at a time; results come back in the configured order.
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for (name, _), (found, exc) in zip(tasks, pool.map(run, [t for _, t in tasks])):
+            if exc is None:
+                log.info("%-30s %4d jobs", name, len(found))
+                yield from found
+            else:
+                log.warning("%-30s FAILED: %s", name, exc)
