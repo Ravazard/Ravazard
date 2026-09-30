@@ -42,13 +42,15 @@ def _fmt_row(job: Job) -> str:
     return f"{job.score:5.1f}  {job.status.value:<12} {job.key:<38} {job.company[:18]:<18} {job.title[:48]:<48} {where[:24]}"
 
 
-def _print_jobs(jobs: list[Job]) -> None:
+def _print_jobs(jobs: list[Job], why: bool = False) -> None:
     if not jobs:
         print("(no jobs)")
         return
     print(f"{'score':>5}  {'status':<12} {'key':<38} {'company':<18} {'title':<48} where")
     for j in jobs:
         print(_fmt_row(j))
+        if why and j.reasons:
+            print(f"{'':>7}why: {'; '.join(j.reasons)[:150]}")
 
 
 def _llm_rerank(store: Store, profile: Profile, jobs: list[Job]) -> None:
@@ -122,7 +124,11 @@ def cmd_rescore(args, profile: Profile, store: Store) -> int:
 
 def cmd_list(args, profile: Profile, store: Store) -> int:
     statuses = [Status(s) for s in args.status] if args.status else [Status.MATCHED, Status.APPROVED]
-    _print_jobs(store.by_status(*statuses, limit=args.limit))
+    jobs = store.by_status(*statuses)
+    if args.title:
+        words = [w.lower() for w in args.title]
+        jobs = [j for j in jobs if any(w in j.title.lower() for w in words)]
+    _print_jobs(jobs[: args.limit], why=args.why)
     return 0
 
 
@@ -231,6 +237,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("list", help="list jobs")
     sp.add_argument("--status", nargs="*", choices=[s.value for s in Status])
     sp.add_argument("--limit", type=int, default=50)
+    sp.add_argument("--title", nargs="+", help="only titles containing any of these words")
+    sp.add_argument("--why", action="store_true", help="show the scoring reasons")
 
     sp = sub.add_parser("show", help="show one job in detail")
     sp.add_argument("key")

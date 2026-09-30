@@ -170,6 +170,13 @@ def test_cli_search_list_approve(tmp_path, monkeypatch, capsys, profile):
     out = capsys.readouterr().out
     assert "6 new jobs, 2 good matches" in out
 
+    assert main(["--profile", str(prof), "--db", db, "list", "--status", "rejected",
+                 "--title", "oracle", "database", "--why"]) == 0
+    out = capsys.readouterr().out
+    assert "Senior Oracle DBA" in out and "Principal Database Architect" in out
+    assert "why: title contains excluded" in out
+    assert "Account Executive" not in out and "SQL Server DBA" not in out
+
     assert main(["--profile", str(prof), "--db", db, "approve", "--top", "5"]) == 0
     store = Store(db)
     approved = store.by_status(Status.APPROVED)
