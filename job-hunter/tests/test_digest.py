@@ -103,3 +103,33 @@ def test_rejected_password_gives_clear_advice(tmp_path, monkeypatch, capsys):
     assert main(base + ["digest"]) == 1
     err = capsys.readouterr().err
     assert "app password" in err and "add-generic-password -U" in err
+
+
+def test_normalize_app_password():
+    import pytest
+
+    assert digest.normalize_app_password("abcd efgh ijkl mnop") == "abcdefghijklmnop"
+    assert digest.normalize_app_password(" ABCD EFGH\tIJKL MNOP\n") == "abcdefghijklmnop"
+    with pytest.raises(digest.DigestError, match="17 characters"):
+        digest.normalize_app_password("MyNormalPass2024!")   # a regular password
+
+
+def test_set_email_password_saves_and_tests(tmp_path, monkeypatch, capsys):
+    base = setup(tmp_path, monkeypatch)
+    monkeypatch.delenv("JOBHUNTER_SMTP_PASSWORD")
+    monkeypatch.setattr(digest.sys, "platform", "linux")
+    monkeypatch.setattr(digest, "PASSWORD_FILE", tmp_path / "cfg" / "smtp_password")
+    FakeSMTP.expected = "abcdefghijklmnop"
+    monkeypatch.setattr(FakeSMTP, "login", lambda self, u, p: None if p == FakeSMTP.expected
+                        else (_ for _ in ()).throw(__import__("smtplib").SMTPAuthenticationError(535, b"no")))
+
+    monkeypatch.setattr("getpass.getpass", lambda prompt="": "MyNormalPass2024!")
+    assert main(base + ["set-email-password"]) == 1
+    assert "17 characters" in capsys.readouterr().err
+    assert not (tmp_path / "cfg" / "smtp_password").exists()
+
+    monkeypatch.setattr("getpass.getpass", lambda prompt="": "abcd efgh ijkl mnop")
+    assert main(base + ["set-email-password"]) == 0
+    assert "Login works" in capsys.readouterr().out
+    f = tmp_path / "cfg" / "smtp_password"
+    assert f.read_text() == "abcdefghijklmnop" and oct(f.stat().st_mode & 0o777) == "0o600"

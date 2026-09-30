@@ -86,7 +86,11 @@ emailed once.
 
 1. Turn on 2-Step Verification for your Google account, then create an app password at
    https://myaccount.google.com/apppasswords (16 letters).
-2. Save it in the macOS Keychain. It's never written to profile.yaml:
+2. Save and test it (stored in the macOS Keychain, never in profile.yaml):
+   ```bash
+   python -m jobhunter set-email-password
+   ```
+   Or save it by hand:
    ```bash
    security add-generic-password -a you@gmail.com -s jobhunter-smtp -T /usr/bin/security -w
    ```

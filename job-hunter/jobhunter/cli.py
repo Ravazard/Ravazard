@@ -310,6 +310,38 @@ def cmd_digest(args, profile: Profile, store: Store) -> int:
     return 0
 
 
+def cmd_set_email_password(args, profile: Profile, store: Store) -> int:
+    import getpass
+    import smtplib
+
+    from jobhunter.digest import DigestError, normalize_app_password, save_password, check_login
+
+    user = profile.notify.smtp_user or profile.notify.email_to
+    if not user:
+        print("Set notify.email_to in profile.yaml first.", file=sys.stderr)
+        return 1
+    print(f"Paste the 16-letter Gmail app password for {user}.")
+    print("(Nothing shows while you paste; that's normal. Then press Return.)")
+    try:
+        pw = normalize_app_password(getpass.getpass("App password: "))
+    except DigestError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    where = save_password(user, pw)
+    print(f"Saved to {where}. Testing the login with Gmail...")
+    try:
+        check_login(profile)
+    except smtplib.SMTPAuthenticationError as exc:
+        print(f"Gmail rejected it ({exc.smtp_code}). Create a NEW app password and run this again.",
+              file=sys.stderr)
+        return 1
+    except Exception as exc:  # noqa: BLE001
+        print(f"Couldn't reach Gmail: {exc}", file=sys.stderr)
+        return 1
+    print("Login works. Send yourself a digest with:  python -m jobhunter digest")
+    return 0
+
+
 def cmd_stats(args, profile: Profile, store: Store) -> int:
     counts = store.counts()
     for s in Status:
@@ -367,6 +399,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--log", default="search.log", help="include the tail of this log file")
     sp.add_argument("--preview", metavar="FILE.html", help="write the email to a file instead of sending")
     sp.add_argument("--skip-empty", action="store_true", help="don't send when there are no new matches")
+
+    sub.add_parser("set-email-password", help="save and test the Gmail app password for digest")
 
     sp = sub.add_parser("check-boards", help="test company board names and keep the working ones")
     sp.add_argument("--file", default=str(HERE / "companies" / "india.yaml"),

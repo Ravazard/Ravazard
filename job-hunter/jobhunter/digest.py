@@ -56,6 +56,41 @@ def _raw_password(user: str) -> str:
     )
 
 
+def normalize_app_password(raw: str) -> str:
+    """Strip every kind of space; raise if what's left isn't a 16-letter Gmail app password."""
+    pw = "".join(raw.split()).replace(" ", "")
+    if len(pw) != 16 or not pw.isalpha():
+        raise DigestError(
+            f"That's {len(pw)} characters. A Gmail app password is exactly 16 letters "
+            "(shown as 'abcd efgh ijkl mnop'). Your normal Gmail password won't work. "
+            "Create one at https://myaccount.google.com/apppasswords"
+        )
+    return pw.lower()
+
+
+def save_password(user: str, pw: str) -> str:
+    """Store in the macOS Keychain (replacing any old one), else in a chmod-600 file."""
+    if sys.platform == "darwin":
+        subprocess.run(["security", "delete-generic-password", "-a", user, "-s", KEYCHAIN_SERVICE],
+                       capture_output=True)
+        out = subprocess.run(["security", "add-generic-password", "-U", "-a", user, "-s", KEYCHAIN_SERVICE,
+                              "-T", "/usr/bin/security", "-w", pw], capture_output=True, text=True)
+        if out.returncode == 0:
+            return "macOS Keychain"
+    PASSWORD_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PASSWORD_FILE.write_text(pw)
+    PASSWORD_FILE.chmod(0o600)
+    return str(PASSWORD_FILE)
+
+
+def check_login(profile: Profile) -> None:
+    n = profile.notify
+    user = n.smtp_user or n.email_to
+    with smtplib.SMTP(n.smtp_host, n.smtp_port, timeout=60) as smtp:
+        smtp.starttls()
+        smtp.login(user, smtp_password(user))
+
+
 def _approve_cmd(job: Job) -> str:
     return f"python -m jobhunter approve {job.key}"
 
