@@ -35,6 +35,7 @@ class Search(BaseModel):
     remote_only: bool = False
     include_remote: bool = True      # also accept remote jobs outside your locations
     require_core_skill: bool = False  # reject postings that mention none of your core skills
+    required_title_words: list[str] = Field(default_factory=list)  # title must contain one of these
     locations: list[str] = Field(default_factory=list)
     min_salary_usd: int = 0
     exclude_title_keywords: list[str] = Field(default_factory=list)

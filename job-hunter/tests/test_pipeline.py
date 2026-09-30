@@ -107,6 +107,24 @@ def test_open_source_only(profile):
     assert not pg.excluded and my.score > pg.score
 
 
+def test_real_false_positives_rejected(profile):
+    # Titles that wrongly matched in a real run (their descriptions mention MySQL).
+    desc = "We run MySQL and PostgreSQL. Linux, bash, replication."
+    for title in ["Site Reliability Engineer (CI-CD)",
+                  "Sales Compensation Engineer",
+                  "Software Engineer – Tooling & Platform",
+                  "Senior Site Reliability Engineer (CI-CD/CTAP/Delivery)",
+                  "Senior MySQL DBA"]:
+        assert score_job(_job(title, desc, "Bengaluru, India"), profile).excluded, title
+    for title in ["MySQL DBA", "Database Administrator", "Database Engineer - MariaDB", "DB Engineer"]:
+        assert not score_job(_job(title, desc, "Bengaluru, India"), profile).excluded, title
+
+
+def test_generic_title_words_count_less():
+    assert title_similarity("Site Reliability Engineer", ["Database Reliability Engineer"]) < 0.5
+    assert title_similarity("Database Reliability Engineer", ["Database Reliability Engineer"]) == 1.0
+
+
 def test_placeholder_values_block_applying(profile):
     probs = " ".join(profile.problems())
     assert "email" in probs and "first_name" in probs and "linkedin" in probs

@@ -99,13 +99,24 @@ def _norm_title(title: str) -> set[str]:
     return {w for w in re.findall(r"[a-z+#]+", t) if w not in {"and", "of", "the", "a", "-"}}
 
 
+# Words that appear in almost every tech title; sharing only these says little.
+GENERIC_TITLE_WORDS = {"engineer", "software", "specialist", "analyst", "associate",
+                       "consultant", "reliability", "operations", "platform", "systems"}
+
+
 def title_similarity(title: str, targets: list[str]) -> float:
+    """Weighted word overlap; generic words like "engineer" count a quarter."""
     words = _norm_title(title)
+
+    def weight(w: str) -> float:
+        return 0.25 if w in GENERIC_TITLE_WORDS else 1.0
+
     best = 0.0
     for target in targets:
         want = _norm_title(target)
         if want:
-            best = max(best, len(words & want) / len(want))
+            got = sum(weight(w) for w in words & want)
+            best = max(best, got / sum(weight(w) for w in want))
     return best
 
 
@@ -135,6 +146,8 @@ def score_job(job: Job, profile: Profile) -> Match:
     for kw in s.exclude_title_keywords:
         if has_term(job.title, kw):
             return Match(0, [f"title contains excluded '{kw}'"], True)
+    if s.required_title_words and not any(has_term(job.title, w) for w in s.required_title_words):
+        return Match(0, ["title has none of: " + ", ".join(s.required_title_words)], True)
     for kw in s.exclude_keywords:
         if has_term(text, kw):
             return Match(0, [f"posting mentions excluded '{kw}'"], True)

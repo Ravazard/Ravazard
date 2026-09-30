@@ -38,9 +38,12 @@ search:
   # Open-source databases only: reject any posting that doesn't mention
   # MySQL or MariaDB (the core skills below).
   require_core_skill: true
+  # The job title itself must be about databases. This stops "Site Reliability
+  # Engineer" or "Software Engineer" roles that merely mention MySQL.
+  required_title_words: ["database", "databases", "dba", "db", "mysql", "mariadb", "postgres", "postgresql", "sql"]
   exclude_title_keywords: [
     # too senior for ~2 years of experience
-    "principal", "staff", "architect", "lead", "manager", "director", "head", "intern",
+    "senior", "sr", "principal", "staff", "architect", "lead", "manager", "director", "head", "intern",
     # proprietary databases you don't work with
     "oracle", "sql server", "mssql", "db2", "sybase", "teradata",
   ]
@@ -62,9 +65,11 @@ skills:
 # its careers page. If the link goes to boards.greenhouse.io/<slug>,
 # jobs.lever.co/<slug> or jobs.ashbyhq.com/<slug>, add <slug> below.
 sources:
-  greenhouse: ["stripe", "databricks", "rubrik", "cloudflare", "mongodb", "confluent", "okta"]
-  lever: []
-  ashby: []
+  greenhouse: ["razorpaysoftwareprivatelimited", "devrev", "orioninnovationnaukri",
+               "gravitonresearchcapital", "alphagrepsecurities", "accordionindia",
+               "stripe", "databricks", "rubrik", "cloudflare", "mongodb", "okta"]
+  lever: ["meesho"]           # Meesho has posted "Database Engineer I" roles in Bengaluru
+  ashby: ["confluent"]
   remotive: false
   remoteok: false
 
