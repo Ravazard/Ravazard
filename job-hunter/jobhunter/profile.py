@@ -92,6 +92,9 @@ class Profile(BaseModel):
         p = self.personal
         if not p.email or "example.com" in p.email:
             out.append("personal.email is not set")
+        resume = self.resume_file
+        if not resume or not resume.exists():
+            out.append(f"resume not found at {resume} (copy your resume there as resume.pdf)")
         for name in ("first_name", "last_name", "email", "phone", "linkedin", "current_company"):
             value = getattr(p, name)
             if re.search(r"your-handle|example\.com|^your\b|^name$|fill.?me|90000 00000|555 000", value, re.I):

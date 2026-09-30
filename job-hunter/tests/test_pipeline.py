@@ -134,9 +134,12 @@ def test_generic_title_words_count_less():
     assert title_similarity("Database Reliability Engineer", ["Database Reliability Engineer"]) == 1.0
 
 
-def test_placeholder_values_block_applying(profile):
+def test_placeholder_values_block_applying(profile, tmp_path):
     probs = " ".join(profile.problems())
     assert "email" in probs and "first_name" in probs and "linkedin" in probs
+    assert "resume not found" in probs
+    (tmp_path / "resume.pdf").write_bytes(b"%PDF-1.4\n")
+    profile.personal.resume_path = str(tmp_path / "resume.pdf")
     profile.personal.first_name, profile.personal.last_name = "Test", "User"
     profile.personal.email, profile.personal.phone = "me@mail.test", "+91 9000000001"
     profile.personal.linkedin = profile.personal.current_company = ""
