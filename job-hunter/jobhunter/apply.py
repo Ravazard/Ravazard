@@ -333,6 +333,11 @@ def apply_to_job(
     if not resume or not resume.exists():
         return ApplyResult(Status.FAILED, f"resume not found at {resume}")
 
+    from jobhunter.sources import company_from_slug
+
+    if re.search(r"[-_]\d+$|^[a-z0-9-]+$", job.company):   # a raw board slug like "Brillio-2"
+        job.company = company_from_slug(job.company)
+
     screenshot_dir.mkdir(parents=True, exist_ok=True)
     shot = screenshot_dir / f"{re.sub(r'[^A-Za-z0-9_-]+', '_', job.key)}.png"
     resolver = Resolver(profile, job, use_llm=profile.apply.use_llm_for_questions)

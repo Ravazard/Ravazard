@@ -72,6 +72,16 @@ def test_dba_scoring(profile):
     assert scored["globex/abc-123"].score < profile.apply.min_score
 
 
+def test_company_from_slug():
+    from jobhunter.sources import company_from_slug
+
+    assert company_from_slug("brillio-2") == "Brillio"
+    assert company_from_slug("Brillio-2") == "Brillio"
+    assert company_from_slug("razorpaysoftwareprivatelimited") == "Razorpay"
+    assert company_from_slug("open-financial") == "Open Financial"
+    assert company_from_slug("meesho") == "Meesho"
+
+
 def test_matching_helpers():
     assert has_term("Expert in C++17 and STL", "C++")
     assert not has_term("C# developer", "C++")

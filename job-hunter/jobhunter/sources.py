@@ -43,6 +43,13 @@ def detect_ats(url: str) -> str:
     return ""
 
 
+def company_from_slug(slug: str) -> str:
+    """Best-effort display name from a board slug: "brillio-2" -> "Brillio"."""
+    name = re.sub(r"[-_]?\d+$", "", slug)
+    name = re.sub(r"(softwareprivatelimited|privatelimited|pvtltd|llc|inc)$", "", name, flags=re.I)
+    return " ".join(w.capitalize() for w in re.split(r"[-_]+", name) if w) or slug
+
+
 def _looks_remote(*texts: str) -> bool:
     return any(re.search(r"\bremote\b|anywhere|worldwide", t or "", re.I) for t in texts)
 
@@ -58,7 +65,7 @@ def greenhouse(board: str, fetch: Fetcher = http_get_json) -> list[Job]:
         jobs.append(Job(
             source="greenhouse",
             external_id=f"{board}/{j['id']}",
-            company=j.get("company_name") or board.title(),
+            company=j.get("company_name") or company_from_slug(board),
             title=j.get("title", ""),
             url=url,
             apply_url=url,
@@ -89,7 +96,7 @@ def lever(company: str, fetch: Fetcher = http_get_json) -> list[Job]:
         jobs.append(Job(
             source="lever",
             external_id=f"{company}/{j['id']}",
-            company=company.title(),
+            company=company_from_slug(company),
             title=j.get("text", ""),
             url=j.get("hostedUrl", ""),
             apply_url=j.get("applyUrl") or (j.get("hostedUrl", "") + "/apply"),
@@ -123,7 +130,7 @@ def ashby(org: str, fetch: Fetcher = http_get_json) -> list[Job]:
         jobs.append(Job(
             source="ashby",
             external_id=f"{org}/{j['id']}",
-            company=org.title(),
+            company=company_from_slug(org),
             title=j.get("title", ""),
             url=url,
             apply_url=j.get("applyUrl") or url,
