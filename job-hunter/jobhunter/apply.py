@@ -580,10 +580,14 @@ def apply_to_job(
                 human("In the browser window, " + " and ".join(todo)
                       + ", then click Submit yourself.", page)
                 try:
-                    page.wait_for_timeout(1500)
+                    body = ""
+                    for _ in range(15):                  # the confirmation page can take a while
+                        page.wait_for_timeout(1000)
+                        body = " ".join(fr.locator("body").inner_text()
+                                        for fr in page.frames if fr.locator("body").count())
+                        if SUCCESS_RE.search(body):
+                            break
                     page.screenshot(path=str(shot), full_page=True)
-                    body = " ".join(fr.locator("body").inner_text()
-                                    for fr in page.frames if fr.locator("body").count())
                 except Exception:  # noqa: BLE001 - the person closed the browser window
                     why = "captcha on form" if captcha else "unanswered required: " + "; ".join(missing[:6])
                     return ApplyResult(Status.NEEDS_MANUAL,

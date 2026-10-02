@@ -276,3 +276,16 @@ def test_skills_report(tmp_path, monkeypatch, capsys):
     assert main(base + ["skills-report", "--max-years", "4"]) == 0
     out = capsys.readouterr().out
     assert "in 3 database job postings asking for at most 4 years" in out   # drops 5-8 and 12+ yrs
+
+
+def test_mark_command(tmp_path, monkeypatch, capsys, profile):
+    data = yaml.safe_load((ROOT / "profile.dba.example.yaml").read_text())
+    data["sources"] = {"greenhouse": ["acme"], "lever": [], "ashby": []}
+    prof = tmp_path / "profile.yaml"
+    prof.write_text(yaml.safe_dump(data))
+    monkeypatch.setattr(sources, "http_get_json", fake_fetch)
+    base = ["--profile", str(prof), "--db", str(tmp_path / "jobs.db")]
+    main(base + ["search"])
+    assert main(base + ["mark", "greenhouse:acme/101", "applied"]) == 0
+    assert Store(str(tmp_path / "jobs.db")).get("greenhouse:acme/101").status is Status.APPLIED
+    assert main(base + ["mark", "greenhouse:nope/1", "applied"]) == 1

@@ -159,6 +159,17 @@ def cmd_approve(args, profile: Profile, store: Store) -> int:
     return 0
 
 
+def cmd_mark(args, profile: Profile, store: Store) -> int:
+    """Record what really happened, e.g. you got the confirmation email."""
+    if not store.get(args.key):
+        print(f"No job {args.key}")
+        return 1
+    status = Status(args.status)
+    store.set_status(args.key, status, "marked by you")
+    print(f"  {args.key} -> {status.value}")
+    return 0
+
+
 def cmd_skip(args, profile: Profile, store: Store) -> int:
     for key in args.keys:
         store.set_status(key, Status.SKIPPED)
@@ -440,6 +451,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("approve", help="approve jobs for applying")
     sp.add_argument("keys", nargs="*")
     sp.add_argument("--top", type=int, help="approve the N best-scoring matches")
+
+    sp = sub.add_parser("mark", help="set a job's status yourself (e.g. applied after a confirmation email)")
+    sp.add_argument("key")
+    sp.add_argument("status", choices=["applied", "approved", "skipped", "needs_manual"])
 
     sp = sub.add_parser("skip", help="never apply to these jobs")
     sp.add_argument("keys", nargs="+")
