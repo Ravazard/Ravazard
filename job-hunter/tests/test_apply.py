@@ -182,7 +182,7 @@ def test_search_dropdowns_pick_the_exact_match(setup, browser):
     res = apply_to_job(job, profile, dry_run=True, browser=browser, screenshot_dir=tmp / "shots")
     assert res.status is Status.DRY_RUN, res.note
     assert res.filled["Country"] == "India"                        # not "British Indian Ocean Territory"
-    assert res.filled["Location (City)"] == "Chennai, India"
+    assert res.filled["Location (City)"] == "Chennai, Tamil Nadu, India"   # the option actually chosen
 
 
 def test_dropdown_without_a_match_is_left_for_the_person(setup, browser):
@@ -325,3 +325,54 @@ def test_screening_questions_from_answer_lists(setup, browser):
     assert f["How did you come to know about Sigmoid?"] == "Job Board"
     # The opinion question has no answer: it's left for the person.
     assert "one word" in res.note
+
+
+REACT_SELECTS = """
+<div><label for="tot">Total Professional Experience *</label><input id="tot" role="combobox" required><ul id="m1" role="listbox"></ul></div>
+<div><label for="src">How did you come to know about Sigmoid? *</label><input id="src" role="combobox" required><ul id="m2" role="listbox"></ul></div>
+<script>
+// Like react-select: clicking opens the full menu; typing filters it.
+function menu(inp, list, all) {
+  const show = q => { list.innerHTML = ''; all.filter(x => x.toLowerCase().includes(q)).forEach(x => {
+      const li = document.createElement('li'); li.setAttribute('role', 'option'); li.textContent = x;
+      li.onclick = () => { inp.value = x; list.innerHTML = ''; }; list.appendChild(li); }); };
+  inp.addEventListener('click', () => show(''));
+  inp.addEventListener('input', () => show(inp.value.toLowerCase()));
+  inp.addEventListener('keydown', e => { if (e.key === 'Escape') list.innerHTML = ''; });
+}
+menu(document.getElementById('tot'), document.getElementById('m1'), ['0-1 Years', '1-3 Years', '3-5 Years', '5+ Years']);
+menu(document.getElementById('src'), document.getElementById('m2'), ['Naukri', 'LinkedIn', 'Employee Referral']);
+</script>
+"""
+
+
+def test_search_dropdowns_try_every_acceptable_answer(setup, browser):
+    tmp, profile, job = setup
+    (tmp / "form.html").write_text((tmp / "form.html").read_text().replace("<!--EXTRA-->", REACT_SELECTS))
+    profile.answers.update({
+        "total professional experience": ["2 years 2 months", "2.17"],
+        "how did you come to know": ["Job Board", "LinkedIn"],      # no "Job Board" option here
+    })
+    seen = {}
+
+    def person(message, page):
+        seen.update(tot=page.locator("#tot").input_value(), src=page.locator("#src").input_value())
+        page.click("button[type=submit]")
+        page.wait_for_load_state()
+
+    (tmp / "form.html").write_text((tmp / "form.html").read_text().replace(
+        "</form>", '<div class="g-recaptcha" style="width:300px;height:80px"></div></form>'))
+    res = apply_to_job(job, profile, dry_run=False, browser=browser, screenshot_dir=tmp / "shots", human=person)
+    assert res.status is Status.APPLIED, res.note
+    assert seen == {"tot": "1-3 Years", "src": "LinkedIn"}
+    assert res.filled["Total Professional Experience"] == "1-3 Years"     # shows what was really chosen
+
+
+def test_inspect_shows_dropdown_options(setup, browser):
+    from jobhunter.apply import inspect_form
+    tmp, profile, job = setup
+    (tmp / "form.html").write_text((tmp / "form.html").read_text().replace("<!--EXTRA-->", REACT_SELECTS))
+    profile.answers.update({"how did you come to know": ["Job Board", "LinkedIn"]})
+    rows = {f.label: (f, v) for f, v in inspect_form(job, profile, browser=browser)}
+    f, v = rows["How did you come to know about Sigmoid?"]
+    assert f.options == ["Naukri", "LinkedIn", "Employee Referral"] and v == "LinkedIn"

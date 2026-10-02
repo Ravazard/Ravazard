@@ -316,6 +316,11 @@ class Resolver:
             return llm.answer_question(f.label, f.options, self.job, self.profile)
         return None
 
+    def alternatives(self, f: Field) -> list[str]:
+        """Every acceptable answer for this field (when the profile gives a list)."""
+        canned = self.profile.canned_answer(f.label) if f.label else None
+        return [c for c in canned if c] if isinstance(canned, list) else []
+
     def cover_letter(self) -> str:
         if self.profile.apply.use_llm_for_cover_letter:
             from jobhunter import llm
@@ -360,7 +365,45 @@ def _open_form(page, job: Job) -> None:
                 break
 
 
-def _fill(frame, f: Field, value: str, resume: Path | None, cover_file: Path | None) -> bool:
+def _menu_options(frame):
+    """Options of the dropdown menu that is currently open (waits for slow/async lists)."""
+    options = frame.locator("[role=option]")
+    for _ in range(8):
+        frame.page.wait_for_timeout(300)
+        if options.count():
+            break
+    return options, [t.strip() for t in options.all_inner_texts()]
+
+
+def _fill_combobox(frame, box, candidates: list[str]) -> str:
+    """Dropdowns built as search boxes (Greenhouse questions, country, city, school...).
+
+    1. Open the menu and pick from everything it lists, trying each acceptable answer
+       (experience ranges like "1-3 Years" match a numeric answer such as "2.17").
+    2. If nothing matched, type each answer as a search (long lists such as cities
+       or schools only show results after typing) and pick the matching result.
+    Never just takes the first option: typing "India" also lists "British Indian Ocean Territory".
+    """
+    box.click()
+    options, texts = _menu_options(frame)
+    for c in candidates:
+        if texts and (hit := pick_option(c, texts)) is not None:
+            options.nth(texts.index(hit)).click()
+            return hit
+    for c in candidates:
+        if re.fullmatch(r"\d+(?:\.\d+)?", c.strip()):
+            continue                                  # numbers only make sense against a full list
+        box.fill(c.split(",")[0].strip())             # search "Chennai", then pick the full match
+        options, texts = _menu_options(frame)
+        if texts and (hit := pick_option(c, texts)) is not None:
+            options.nth(texts.index(hit)).click()
+            return hit
+    box.press("Escape")
+    raise LookupError(f"no option matching {candidates}")
+
+
+def _fill(frame, f: Field, value: str, resume: Path | None, cover_file: Path | None,
+          alts: list[str] | None = None) -> bool | str:
     loc = frame.locator(f'[data-jh-idx="{f.idx}"]')
     if f.kind == "file":
         path = cover_file if re.search(r"cover", f.key) else resume
@@ -379,23 +422,7 @@ def _fill(frame, f: Field, value: str, resume: Path | None, cover_file: Path | N
         loc.first.check(force=True)
         return True
     if f.kind == "combobox":
-        # Search-as-you-type dropdowns (Greenhouse country, city, school, degree...).
-        # Pick the option that actually matches; typing "India" also lists
-        # "British Indian Ocean Territory", so never just take the first one.
-        loc.first.click()
-        loc.first.fill(value.split(",")[0].strip())   # search "Chennai", then pick the full match
-        options = frame.locator("[role=option]")
-        for _ in range(10):                      # async lists (cities, schools) load slowly
-            frame.page.wait_for_timeout(400)
-            if options.count():
-                break
-        texts = [t.strip() for t in options.all_inner_texts()]
-        choice = pick_option(value, texts)
-        if choice is None:
-            loc.first.press("Escape")
-            raise LookupError(f"no option matching '{value}'")
-        options.nth(texts.index(choice)).click()
-        return True
+        return _fill_combobox(frame, loc.first, [value] + [a for a in (alts or []) if a != value])
     loc.first.fill(value)
     return True
 
@@ -416,7 +443,19 @@ def inspect_form(job: Job, profile: Profile, *, browser) -> list[tuple[Field, st
                 out.append((f, "(resume / cover letter upload)"))
                 continue
             value = resolver.resolve(f)
-            if value and f.options and f.kind != "combobox":
+            if f.kind == "combobox":
+                try:
+                    box = frame.locator(f'[data-jh-idx="{f.idx}"]').first
+                    box.click()
+                    _, f.options = _menu_options(frame)
+                    box.press("Escape")
+                except Exception:  # noqa: BLE001 - diagnostics only
+                    pass
+                if value and f.options:
+                    cands = [value] + [a for a in resolver.alternatives(f) if a != value]
+                    hit = next((h for c in cands if (h := pick_option(c, f.options))), None)
+                    value = hit or f"{cands} match none of the listed options (a search may still find it)"
+            elif value and f.options:
                 value = pick_option(value, f.options) or f"{value!r} matches no option"
             out.append((f, value))
         return out
@@ -511,8 +550,8 @@ def apply_to_job(
                                 missing.append(f"{f.label} (no option matches '{value}')")
                             continue
                         value = choice
-                    _fill(frame, f, value, resume, cover_file)
-                    shown = " ".join(value.split())
+                    got = _fill(frame, f, value, resume, cover_file, resolver.alternatives(f))
+                    shown = " ".join((got if isinstance(got, str) else value).split())
                     filled[f.label or f.name] = shown if len(shown) < 80 else shown[:77] + "..."
                 except Exception as exc:  # noqa: BLE001
                     log.debug("could not fill %s: %s", f.label, exc)
