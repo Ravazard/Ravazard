@@ -278,3 +278,50 @@ def test_inspect_lists_fields_without_filling(setup, browser):
     assert rows["Start date month"][1] == "Jul"
     assert rows["Start date year"][1] is None            # no answer configured in this test
     assert rows["Email"][1] == "you@example.com"
+
+
+def test_years_buckets_and_answer_lists():
+    cases = [
+        ("2.17", ["0-1 years", "1-3 years", "3-5 years", "5+ years"], "1-3 years"),
+        ("2.17", ["Less than 1 year", "1 - 2 Years", "2 - 3 Years", "3+ Years"], "2 - 3 Years"),
+        ("2.17", ["Fresher", "1+ years", "2+ years", "5+ years"], "2+ years"),
+        ("2.17", ["0 years", "1 year", "2 years", "3 years"], "2 years"),
+        ("2.17", ["Less than 3 years", "2-3 years"], "2-3 years"),
+        ("0.5", ["Less than 1 year", "1-3 years"], "Less than 1 year"),
+        ("2.17", ["Yes", "No"], None),
+    ]
+    for answer, options, want in cases:
+        assert pick_option(answer, options) == want, (answer, options)
+
+
+SIGMOID_LIKE = """
+<div><label for="desig">Current Designation *</label><input id="desig" name="desig" required></div>
+<div><label for="tot">Total Professional Experience *</label>
+  <select id="tot" name="tot" required><option value="">Select</option><option>0-1 Years</option>
+  <option>1-3 Years</option><option>3-5 Years</option></select></div>
+<div><label for="rel">Relevant Professional Experience *</label><input id="rel" name="rel" required></div>
+<div><label for="src">How did you come to know about Sigmoid? *</label>
+  <select id="src" name="src" required><option value="">Select</option><option>Naukri</option>
+  <option>Job Board</option><option>LinkedIn</option><option>Referral</option></select></div>
+<div><label for="word">What is the one word that comes to your mind when you think of Sigmoid? *</label>
+  <input id="word" name="word" required></div>
+"""
+
+
+def test_screening_questions_from_answer_lists(setup, browser):
+    tmp, profile, job = setup
+    (tmp / "form.html").write_text((tmp / "form.html").read_text().replace("<!--EXTRA-->", SIGMOID_LIKE))
+    profile.answers.update({
+        "current designation": "MySQL Database Administrator",
+        "total professional experience": ["2 years 2 months", "2.17"],
+        "relevant professional experience": ["2 years 2 months", "2.17"],
+        "how did you come to know": ["Job Board", "LinkedIn"],
+    })
+    res = apply_to_job(job, profile, dry_run=True, browser=browser, screenshot_dir=tmp / "shots")
+    f = res.filled
+    assert f["Current Designation"] == "MySQL Database Administrator"
+    assert f["Total Professional Experience"] == "1-3 Years"           # bucket from 2.17
+    assert f["Relevant Professional Experience"] == "2 years 2 months"  # free text: first answer
+    assert f["How did you come to know about Sigmoid?"] == "Job Board"
+    # The opinion question has no answer: it's left for the person.
+    assert "one word" in res.note

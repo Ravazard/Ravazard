@@ -211,11 +211,41 @@ def _month_forms(answer: str) -> set[str]:
     return set()
 
 
+_RANGE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)")
+_ATLEAST = re.compile(r"(\d+(?:\.\d+)?)\s*\+|(?:more than|above|over|greater than)\s*(\d+(?:\.\d+)?)")
+_LESS = re.compile(r"(?:less than|under|below|<)\s*(\d+(?:\.\d+)?)")
+
+
+def _years_option(years: float, options: list[str]) -> str | None:
+    """Pick the closest bucket containing `years`: '1-3 years', '2+ years', 'Less than 1 year'..."""
+    fits: list[tuple[float, int, str]] = []          # (lower bound, -position, option)
+    for i, opt in enumerate(options):
+        o = opt.lower()
+        if m := _RANGE.search(o):
+            lo, hi = float(m.group(1)), float(m.group(2))
+            if lo <= years <= hi:
+                fits.append((lo, -i, opt))
+        elif m := _LESS.search(o):
+            if years < float(m.group(1)):
+                fits.append((-1.0, -i, opt))
+        elif m := _ATLEAST.search(o):
+            n = float(m.group(1) or m.group(2))
+            if years >= n:
+                fits.append((n, -i, opt))
+        elif m := re.fullmatch(r"\s*(\d+)\s*(?:years?|yrs?)?\s*", o):   # plain "2 years" / "2"
+            if int(m.group(1)) == int(years):
+                fits.append((float(m.group(1)), -i, opt))
+    return max(fits)[2] if fits else None
+
+
 def pick_option(answer: str, options: list[str]) -> str | None:
     """Choose the option that best matches a free-text answer."""
     if not options:
         return None
     a = answer.strip().lower()
+    if re.fullmatch(r"\d+(?:\.\d+)?", a):      # a number of years -> pick the bucket
+        if (hit := _years_option(float(a), options)) is not None:
+            return hit
     months = _month_forms(answer)
     if months:
         for opt in options:
@@ -262,6 +292,14 @@ class Resolver:
             return self.cover_letter()
 
         canned = self.profile.canned_answer(f.label) if f.label else None
+        if isinstance(canned, list):              # several acceptable answers, in order
+            choices = [c for c in canned if c]
+            if f.options:
+                for c in choices:
+                    if (hit := pick_option(c, f.options)) is not None:
+                        return hit
+                return None
+            return choices[0] if choices else None
         if canned is not None and canned != "":
             if f.options:
                 return pick_option(canned, f.options)

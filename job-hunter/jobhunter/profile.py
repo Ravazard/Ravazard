@@ -83,7 +83,8 @@ class Profile(BaseModel):
     sources: Sources = Field(default_factory=Sources)
     apply: ApplySettings = Field(default_factory=ApplySettings)
     notify: Notify = Field(default_factory=Notify)
-    answers: dict[str, str] = Field(default_factory=dict)
+    # A value can be a list of acceptable answers; the first one a dropdown offers is used.
+    answers: dict[str, str | list[str]] = Field(default_factory=dict)
     cover_letter_template: str = ""
 
     # Directory profile.yaml lives in; relative paths resolve against it.
@@ -111,7 +112,7 @@ class Profile(BaseModel):
                 out.append(f"personal.{name} still has the example value '{value}'")
         return sorted(set(out))
 
-    def canned_answer(self, question: str) -> str | None:
+    def canned_answer(self, question: str) -> str | list[str] | None:
         """Return a configured answer whose key appears (as whole words) in the question label."""
         q = question.lower()
         # Longest key first so "authorized to work" beats "work".
