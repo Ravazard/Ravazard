@@ -23,6 +23,7 @@ import re
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 from jobhunter.models import Job, Status
 from jobhunter.profile import Profile
@@ -324,8 +325,15 @@ def apply_to_job(
     headless: bool = True,
     screenshot_dir: Path = Path("screenshots"),
     browser=None,
+    human: Callable[[str, object], None] | None = None,
 ) -> ApplyResult:
-    """Fill the application form for `job`, and submit it unless dry_run."""
+    """Fill the application form for `job`, and submit it unless dry_run.
+
+    `human`, if given, is called when the form needs a person (a CAPTCHA, or a
+    required question we can't answer). It receives a message and the page, and
+    returns once the person has finished the form and clicked Submit themselves.
+    CAPTCHAs are never solved or bypassed by this code.
+    """
     if job.ats not in {"greenhouse", "lever", "ashby"}:
         return ApplyResult(Status.NEEDS_MANUAL, f"unsupported application site ({job.apply_url})")
 
@@ -353,9 +361,11 @@ def apply_to_job(
     try:
         _open_form(page, job)
         frame = _form_frame(page)
-        if _has_captcha(frame):
+        captcha = _has_captcha(frame)
+        if captcha and human is None and not dry_run:
             page.screenshot(path=str(shot), full_page=True)
-            return ApplyResult(Status.NEEDS_MANUAL, "captcha on form", str(shot))
+            return ApplyResult(Status.NEEDS_MANUAL,
+                               "captcha on form: finish it with `apply --submit --show-browser`", str(shot))
 
         fields = [Field(**d) for d in frame.evaluate(DESCRIBE_FIELDS_JS)]
         if not any(f.kind == "email" or "email" in f.key for f in fields):
@@ -402,11 +412,33 @@ def apply_to_job(
                         missing.append(f"{f.label} (error: {exc.__class__.__name__})")
 
             page.screenshot(path=str(shot), full_page=True)
-            if missing:
-                return ApplyResult(Status.NEEDS_MANUAL,
-                                   "unanswered required: " + "; ".join(missing[:6]), str(shot), filled)
             if dry_run:
-                return ApplyResult(Status.DRY_RUN, "form filled, not submitted (dry run)", str(shot), filled)
+                note = "form filled, not submitted (dry run)"
+                if captcha:
+                    note += "; has a CAPTCHA, so you'll finish it yourself with --submit --show-browser"
+                if missing:
+                    note += "; you'll need to answer: " + "; ".join(missing[:6])
+                return ApplyResult(Status.DRY_RUN, note, str(shot), filled)
+            if (captcha or missing) and human is None:
+                why = "captcha on form" if captcha else "unanswered required: " + "; ".join(missing[:6])
+                return ApplyResult(Status.NEEDS_MANUAL, why, str(shot), filled)
+
+            if captcha or missing:
+                # Hand over to the person at the keyboard; they submit, not us.
+                todo = []
+                if missing:
+                    todo.append("answer: " + "; ".join(missing[:6]))
+                if captcha:
+                    todo.append("complete the CAPTCHA")
+                human("In the browser window, " + " and ".join(todo)
+                      + ", then click Submit yourself.", page)
+                page.wait_for_timeout(1500)
+                page.screenshot(path=str(shot), full_page=True)
+                body = " ".join(fr.locator("body").inner_text() for fr in page.frames if fr.locator("body").count())
+                if SUCCESS_RE.search(body):
+                    return ApplyResult(Status.APPLIED, "submitted by you after the form was filled", str(shot), filled)
+                return ApplyResult(Status.NEEDS_MANUAL,
+                                   "no confirmation seen after your submit; check your email", str(shot), filled)
 
             submit = None
             for sel in SUBMIT_SELECTORS:

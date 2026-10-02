@@ -175,6 +175,17 @@ def cmd_apply(args, profile: Profile, store: Store) -> int:
     submit = args.submit or not profile.apply.dry_run
     limit = min(args.limit or profile.apply.max_per_run, profile.apply.max_per_run)
     queue = store.by_status(Status.APPROVED, Status.DRY_RUN if submit else Status.APPROVED, limit=limit)
+
+    # Watching the browser while submitting? Then you can finish CAPTCHAs and
+    # unanswered questions yourself, so jobs that stopped for those come back.
+    human = None
+    if submit and args.show_browser and sys.stdin.isatty():
+        def human(message: str, page) -> None:
+            print(f"\n   >>> {message}")
+            input("   >>> Press Enter here once you've clicked Submit (or to give up on this one)... ")
+        handover = [j for j in store.by_status(Status.NEEDS_MANUAL)
+                    if store.note(j.key).startswith(("captcha", "unanswered required"))]
+        queue = (queue + handover)[:limit]
     if not queue:
         print("Nothing approved to apply to. Use `list` then `approve KEY` (or `approve --top N`).")
         return 0
@@ -190,7 +201,7 @@ def cmd_apply(args, profile: Profile, store: Store) -> int:
                 continue
             print(f"-> {job.company}: {job.title}")
             res = apply_to_job(job, profile, dry_run=not submit, browser=browser,
-                               screenshot_dir=Path(args.screenshots))
+                               screenshot_dir=Path(args.screenshots), human=human)
             store.set_status(job.key, res.status, res.note)
             print(f"   {res.status.value}: {res.note}")
             if res.filled:

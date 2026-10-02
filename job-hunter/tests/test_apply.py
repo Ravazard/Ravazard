@@ -92,3 +92,62 @@ def test_unsupported_site(setup):
     _, profile, job = setup
     job.ats = ""
     assert apply_to_job(job, profile).status is Status.NEEDS_MANUAL
+
+
+def _captcha_form(tmp):
+    html = (tmp / "form.html").read_text().replace(
+        "<!--EXTRA-->", '<div class="g-recaptcha" style="width:300px;height:80px"></div>')
+    (tmp / "form.html").write_text(html)
+
+
+def test_captcha_dry_run_still_fills_the_form(setup, browser):
+    tmp, profile, job = setup
+    _captcha_form(tmp)
+    res = apply_to_job(job, profile, dry_run=True, browser=browser, screenshot_dir=tmp / "shots")
+    assert res.status is Status.DRY_RUN and "CAPTCHA" in res.note
+    assert res.filled["Email"] == "you@example.com"
+
+
+def test_captcha_handed_to_a_person_who_submits(setup, browser):
+    tmp, profile, job = setup
+    _captcha_form(tmp)
+    seen = {}
+
+    def person(message, page):
+        seen["message"] = message
+        # The tool has filled everything; the person does the CAPTCHA and clicks Submit.
+        assert page.locator("#email").input_value() == "you@example.com"
+        page.click("button[type=submit]")
+        page.wait_for_load_state()
+
+    res = apply_to_job(job, profile, dry_run=False, browser=browser,
+                       screenshot_dir=tmp / "shots", human=person)
+    assert "complete the CAPTCHA" in seen["message"]
+    assert res.status is Status.APPLIED and "submitted by you" in res.note
+
+
+def test_person_gives_up_is_not_counted_as_applied(setup, browser):
+    tmp, profile, job = setup
+    _captcha_form(tmp)
+    res = apply_to_job(job, profile, dry_run=False, browser=browser,
+                       screenshot_dir=tmp / "shots", human=lambda message, page: None)
+    assert res.status is Status.NEEDS_MANUAL and "no confirmation" in res.note
+
+
+def test_person_answers_unknown_question(setup, browser):
+    tmp, profile, job = setup
+    html = (tmp / "form.html").read_text().replace(
+        "<!--EXTRA-->",
+        '<div><label for="q9">Describe your largest database migration *</label>'
+        '<textarea id="q9" name="q9" required></textarea></div>')
+    (tmp / "form.html").write_text(html)
+
+    def person(message, page):
+        assert "largest database migration" in message
+        page.fill("#q9", "Moved 2 TB from MySQL 5.7 to 8.0 with zero data loss.")
+        page.click("button[type=submit]")
+        page.wait_for_load_state()
+
+    res = apply_to_job(job, profile, dry_run=False, browser=browser,
+                       screenshot_dir=tmp / "shots", human=person)
+    assert res.status is Status.APPLIED

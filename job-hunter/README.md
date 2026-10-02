@@ -133,7 +133,10 @@ A wrong slug is logged as `FAILED` and skipped. It doesn't stop the run.
   Indian DBA openings are posted only on those sites, so use their own
   job alerts and apply to those by hand. This tool covers companies that host
   their own careers page on Greenhouse, Lever or Ashby.
-- **It doesn't solve CAPTCHAs.** Those jobs are marked `needs_manual`.
+- **It doesn't solve CAPTCHAs.** With `apply --submit --show-browser`, it fills the form,
+  then pauses so *you* complete the CAPTCHA (or any question it couldn't answer) and click
+  Submit; it records the job as applied once the confirmation page appears. Without
+  `--show-browser`, those jobs are marked `needs_manual`.
 - **It doesn't guess.** A required question it can't answer from your profile
   or the `answers:` section stops the application. The job is marked
   `needs_manual` and the question is listed, so you can add an answer to
