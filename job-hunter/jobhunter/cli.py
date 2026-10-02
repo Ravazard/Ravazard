@@ -217,6 +217,34 @@ def cmd_apply(args, profile: Profile, store: Store) -> int:
     return 0
 
 
+def cmd_inspect(args, profile: Profile, store: Store) -> int:
+    from playwright.sync_api import sync_playwright
+
+    from jobhunter.apply import inspect_form, launch_browser
+
+    job = store.get(args.key)
+    if not job:
+        print(f"No job {args.key}")
+        return 1
+    print(f"Fields on the form for {job.title} @ {job.company} (nothing is filled or sent):\n")
+    with sync_playwright() as pw:
+        browser = launch_browser(pw, headless=not args.show_browser)
+        rows = inspect_form(job, profile, browser=browser)
+        browser.close()
+    for f, value in rows:
+        req = "*" if f.required else " "
+        opts = f"  options: {', '.join(f.options[:6])}{' ...' if len(f.options) > 6 else ''}" if f.options else ""
+        shown = " ".join(str(value).split()) if value else "NOT ANSWERED"
+        print(f"{req} [{f.kind:<14}] {f.label[:55]:<55} section: {f.section[:20]:<20} -> "
+              f"{shown[:60] + '...' if len(shown) > 60 else shown}")
+        if f.name or f.id:
+            print(f"      name={f.name!r} id={f.id!r}{opts}")
+    unanswered = [f.label for f, v in rows if f.required and not v]
+    print(f"\n{len(rows)} fields, {len(unanswered)} required ones without an answer"
+          + (": " + "; ".join(unanswered) if unanswered else "."))
+    return 0
+
+
 def cmd_run(args, profile: Profile, store: Store) -> int:
     cmd_search(args, profile, store)
     return cmd_apply(args, profile, store)
@@ -415,6 +443,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("skip", help="never apply to these jobs")
     sp.add_argument("keys", nargs="+")
+
+    sp = sub.add_parser("inspect", help="list a job's form fields and the answers we'd give (fills nothing)")
+    sp.add_argument("key")
+    sp.add_argument("--show-browser", action="store_true")
 
     for name in ("apply", "run"):
         sp = sub.add_parser(name, help="fill/submit applications" if name == "apply" else "search, then apply")

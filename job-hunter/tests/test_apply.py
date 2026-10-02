@@ -264,3 +264,17 @@ def test_education_dates_stay_out_of_employment_section(setup, browser):
     assert res.status is Status.APPLIED, res.note
     assert seen["edu_year"] == "2020" and seen["edu_month"] == "Jul"
     assert seen["job_year"] == "" and seen["job_month"] == ""      # employment section left alone
+
+
+def test_inspect_lists_fields_without_filling(setup, browser):
+    from jobhunter.apply import inspect_form
+    tmp, profile, job = setup
+    (tmp / "form.html").write_text((tmp / "form.html").read_text().replace(
+        "<!--EXTRA-->", "<h3>Education</h3>" + EDUCATION))
+    profile.answers.update({"school": "Amrita Vishwa Vidyapeetham", "start date month": "July"})
+    rows = {f.label: (f, v) for f, v in inspect_form(job, profile, browser=browser)}
+    assert rows["School"][1] == "Amrita Vishwa Vidyapeetham"
+    assert rows["School"][0].section == "Education"
+    assert rows["Start date month"][1] == "Jul"
+    assert rows["Start date year"][1] is None            # no answer configured in this test
+    assert rows["Email"][1] == "you@example.com"

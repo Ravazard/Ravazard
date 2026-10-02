@@ -362,6 +362,30 @@ def _fill(frame, f: Field, value: str, resume: Path | None, cover_file: Path | N
     return True
 
 
+def inspect_form(job: Job, profile: Profile, *, browser) -> list[tuple[Field, str | None]]:
+    """Open the form and report each field with the answer we'd give. Fills nothing."""
+    resolver = Resolver(profile, job, use_llm=False)
+    context = browser.new_context(viewport={"width": 1280, "height": 1800})
+    page = context.new_page()
+    page.set_default_timeout(8_000)
+    try:
+        _open_form(page, job)
+        frame = _form_frame(page)
+        fields = [Field(**d) for d in frame.evaluate(DESCRIBE_FIELDS_JS)]
+        out = []
+        for f in fields:
+            if f.kind == "file":
+                out.append((f, "(resume / cover letter upload)"))
+                continue
+            value = resolver.resolve(f)
+            if value and f.options and f.kind != "combobox":
+                value = pick_option(value, f.options) or f"{value!r} matches no option"
+            out.append((f, value))
+        return out
+    finally:
+        context.close()
+
+
 def apply_to_job(
     job: Job,
     profile: Profile,
