@@ -376,3 +376,42 @@ def test_inspect_shows_dropdown_options(setup, browser):
     rows = {f.label: (f, v) for f, v in inspect_form(job, profile, browser=browser)}
     f, v = rows["How did you come to know about Sigmoid?"]
     assert f.options == ["Naukri", "LinkedIn", "Employee Referral"] and v == "LinkedIn"
+
+
+SLOW_SEARCH = """
+<div><label for="school">School *</label><input id="school" role="combobox" required><ul id="sl" role="listbox"></ul></div>
+<div><label for="city">Location (City) *</label><input id="city" type="text" required><ul id="cl" role="listbox"></ul></div>
+<script>
+// School: a slow search (results after 2.5s). City: plain text box whose suggestion must be clicked,
+// otherwise the typed text is cleared when the box loses focus (like Greenhouse's location field).
+const sl = document.getElementById('sl'), school = document.getElementById('school');
+school.addEventListener('input', () => { sl.innerHTML = ''; const q = school.value.toLowerCase();
+  setTimeout(() => ['Amrita Vishwa Vidyapeetham, Coimbatore', 'Amrita University'].filter(x => x.toLowerCase().includes(q))
+    .forEach(x => { const li = document.createElement('li'); li.setAttribute('role','option'); li.textContent = x;
+      li.onclick = () => { school.value = x; sl.innerHTML = ''; }; sl.appendChild(li); }), 2500); });
+const cl = document.getElementById('cl'), city = document.getElementById('city'); let picked = false;
+city.addEventListener('input', () => { picked = false; cl.innerHTML = '';
+  setTimeout(() => ['Chennai, Tamil Nadu, India', 'Chengalpattu, Tamil Nadu, India'].forEach(x => {
+      const li = document.createElement('li'); li.setAttribute('role','option'); li.textContent = x;
+      li.onmousedown = () => { picked = true; city.value = x; cl.innerHTML = ''; }; cl.appendChild(li); }), 1200); });
+city.addEventListener('blur', () => setTimeout(() => { if (!picked) city.value = ''; }, 50));
+</script>
+"""
+
+
+def test_slow_school_search_and_city_suggestion(setup, browser):
+    tmp, profile, job = setup
+    (tmp / "form.html").write_text((tmp / "form.html").read_text().replace("<!--EXTRA-->", SLOW_SEARCH)
+                                   .replace("</form>", '<div class="g-recaptcha" style="width:300px;height:80px"></div></form>'))
+    profile.personal.location = "Chennai, India"
+    profile.answers["school"] = ["Amrita Vishwa Vidyapeetham", "Amrita University"]
+    seen = {}
+
+    def person(message, page):
+        seen.update(school=page.locator("#school").input_value(), city=page.locator("#city").input_value())
+        page.click("button[type=submit]")
+        page.wait_for_load_state()
+
+    res = apply_to_job(job, profile, dry_run=False, browser=browser, screenshot_dir=tmp / "shots", human=person)
+    assert seen == {"school": "Amrita Vishwa Vidyapeetham, Coimbatore", "city": "Chennai, Tamil Nadu, India"}, seen
+    assert res.status is Status.APPLIED

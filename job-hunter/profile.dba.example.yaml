@@ -131,6 +131,12 @@ answers:
   # marked needs_manual instead of being sent with a blank or made-up answer.
   "current ctc": ""
   "expected ctc": ""
+  # Forms that ask in lakhs (e.g. "Current CTC (In Lakhs - INR)") want 6.82, not 682000.
+  "current ctc (in lakhs": ""          # e.g. 6.82
+  "expected ctc (in lakhs": ""         # e.g. 12.50
+  "current ctc (lpa": ""
+  "expected ctc (lpa": ""
+  "notice period (in days": ""         # a number, e.g. 90
   "salary expectation": ""
 
 cover_letter_template: |

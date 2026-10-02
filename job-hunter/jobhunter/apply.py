@@ -365,13 +365,14 @@ def _open_form(page, job: Job) -> None:
                 break
 
 
-def _menu_options(frame):
+def _menu_options(frame, wait_ms: int = 2400):
     """Options of the dropdown menu that is currently open (waits for slow/async lists)."""
     options = frame.locator("[role=option]")
-    for _ in range(8):
+    for _ in range(max(1, wait_ms // 300)):
         frame.page.wait_for_timeout(300)
         if options.count():
             break
+    frame.page.wait_for_timeout(300)                  # let the rest of a streamed list arrive
     return options, [t.strip() for t in options.all_inner_texts()]
 
 
@@ -394,7 +395,7 @@ def _fill_combobox(frame, box, candidates: list[str]) -> str:
         if re.fullmatch(r"\d+(?:\.\d+)?", c.strip()):
             continue                                  # numbers only make sense against a full list
         box.fill(c.split(",")[0].strip())             # search "Chennai", then pick the full match
-        options, texts = _menu_options(frame)
+        options, texts = _menu_options(frame, wait_ms=6000)   # school/city searches are slow
         if texts and (hit := pick_option(c, texts)) is not None:
             options.nth(texts.index(hit)).click()
             return hit
@@ -424,6 +425,13 @@ def _fill(frame, f: Field, value: str, resume: Path | None, cover_file: Path | N
     if f.kind == "combobox":
         return _fill_combobox(frame, loc.first, [value] + [a for a in (alts or []) if a != value])
     loc.first.fill(value)
+    # Some city/location boxes are plain text with a suggestion list that must be
+    # clicked, or the value is thrown away when the box loses focus.
+    if re.search(r"\blocation\b|\bcity\b", f.key):
+        options, texts = _menu_options(frame, wait_ms=4000)
+        if texts and (hit := pick_option(value, texts)) is not None:
+            options.nth(texts.index(hit)).click()
+            return hit
     return True
 
 
