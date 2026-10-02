@@ -151,3 +151,53 @@ def test_person_answers_unknown_question(setup, browser):
     res = apply_to_job(job, profile, dry_run=False, browser=browser,
                        screenshot_dir=tmp / "shots", human=person)
     assert res.status is Status.APPLIED
+
+
+COMBOS = """
+<div><label for="country">Country *</label><input id="country" role="combobox" required><ul id="lb1" role="listbox"></ul></div>
+<div><label for="city">Location (City) *</label><input id="city" role="combobox" required><ul id="lb2" role="listbox"></ul></div>
+<script>
+function wire(inp, list, all) {
+  inp.addEventListener('input', () => {
+    list.innerHTML = '';
+    const q = inp.value.toLowerCase();
+    setTimeout(() => all.filter(x => x.toLowerCase().includes(q)).forEach(x => {
+      const li = document.createElement('li'); li.setAttribute('role', 'option'); li.textContent = x;
+      li.onclick = () => { inp.value = x; list.innerHTML = ''; };
+      list.appendChild(li);
+    }), 300);   // results arrive late, like a real search
+  });
+}
+wire(document.getElementById('country'), document.getElementById('lb1'), ['British Indian Ocean Territory', 'India', 'Indonesia']);
+wire(document.getElementById('city'), document.getElementById('lb2'), ['Chengdu, China', 'Chennai, Tamil Nadu, India']);
+</script>
+"""
+
+
+def test_search_dropdowns_pick_the_exact_match(setup, browser):
+    tmp, profile, job = setup
+    (tmp / "form.html").write_text((tmp / "form.html").read_text().replace("<!--EXTRA-->", COMBOS))
+    profile.personal.location = "Chennai, India"
+    profile.answers["country"] = "India"
+    res = apply_to_job(job, profile, dry_run=True, browser=browser, screenshot_dir=tmp / "shots")
+    assert res.status is Status.DRY_RUN, res.note
+    assert res.filled["Country"] == "India"                        # not "British Indian Ocean Territory"
+    assert res.filled["Location (City)"] == "Chennai, India"
+
+
+def test_dropdown_without_a_match_is_left_for_the_person(setup, browser):
+    tmp, profile, job = setup
+    (tmp / "form.html").write_text((tmp / "form.html").read_text().replace("<!--EXTRA-->", COMBOS))
+    profile.personal.location = "Coimbatore, India"               # not in the list
+    profile.answers["country"] = "India"
+    res = apply_to_job(job, profile, dry_run=False, browser=browser, screenshot_dir=tmp / "shots")
+    assert res.status is Status.NEEDS_MANUAL and "Location (City)" in res.note
+
+
+def test_closing_the_browser_during_handover_is_not_a_failure(setup, browser):
+    tmp, profile, job = setup
+    _captcha_form(tmp)
+    res = apply_to_job(job, profile, dry_run=False, browser=browser, screenshot_dir=tmp / "shots",
+                       human=lambda message, page: page.close())
+    assert res.status is Status.NEEDS_MANUAL
+    assert res.note.startswith("captcha") and "closed" in res.note   # so the next run picks it up again

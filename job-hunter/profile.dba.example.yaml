@@ -97,6 +97,11 @@ notify:
 
 answers:
   "how did you hear": "Company careers page"
+  # Greenhouse forms often ask these as search-as-you-type dropdowns.
+  "country": "India"
+  "school": ""                         # e.g. your college's full name
+  "degree": ""                         # e.g. Bachelor's Degree
+  "discipline": ""                     # e.g. Electronics and Communication Engineering
   "sponsorship": "No"
   "authorized to work": "Yes"
   "willing to relocate": "Yes"

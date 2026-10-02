@@ -203,6 +203,11 @@ def pick_option(answer: str, options: list[str]) -> str | None:
     for opt in options:                       # answer contained in option
         if a and a in opt.lower():
             return opt
+    head = a.split(",")[0].strip()            # "Chennai, India" vs "Chennai, Tamil Nadu, India"
+    if head and head != a:
+        for opt in options:
+            if opt.strip().lower().startswith(head):
+                return opt
     return None
 
 
@@ -304,14 +309,22 @@ def _fill(frame, f: Field, value: str, resume: Path | None, cover_file: Path | N
         loc.first.check(force=True)
         return True
     if f.kind == "combobox":
+        # Search-as-you-type dropdowns (Greenhouse country, city, school, degree...).
+        # Pick the option that actually matches; typing "India" also lists
+        # "British Indian Ocean Territory", so never just take the first one.
         loc.first.click()
-        loc.first.fill(value)
-        frame.page.wait_for_timeout(800)
-        opt = frame.locator("[role=option]").first
-        if opt.count():
-            opt.click()
-        else:
-            loc.first.press("Enter")
+        loc.first.fill(value.split(",")[0].strip())   # search "Chennai", then pick the full match
+        options = frame.locator("[role=option]")
+        for _ in range(10):                      # async lists (cities, schools) load slowly
+            frame.page.wait_for_timeout(400)
+            if options.count():
+                break
+        texts = [t.strip() for t in options.all_inner_texts()]
+        choice = pick_option(value, texts)
+        if choice is None:
+            loc.first.press("Escape")
+            raise LookupError(f"no option matching '{value}'")
+        options.nth(texts.index(choice)).click()
         return True
     loc.first.fill(value)
     return True
@@ -358,6 +371,7 @@ def apply_to_job(
         browser = launch_browser(own_pw, headless)
     context = browser.new_context(viewport={"width": 1280, "height": 1800})
     page = context.new_page()
+    page.set_default_timeout(8_000)   # fail fast on a stuck field instead of hanging 30s
     try:
         _open_form(page, job)
         frame = _form_frame(page)
@@ -432,9 +446,15 @@ def apply_to_job(
                     todo.append("complete the CAPTCHA")
                 human("In the browser window, " + " and ".join(todo)
                       + ", then click Submit yourself.", page)
-                page.wait_for_timeout(1500)
-                page.screenshot(path=str(shot), full_page=True)
-                body = " ".join(fr.locator("body").inner_text() for fr in page.frames if fr.locator("body").count())
+                try:
+                    page.wait_for_timeout(1500)
+                    page.screenshot(path=str(shot), full_page=True)
+                    body = " ".join(fr.locator("body").inner_text()
+                                    for fr in page.frames if fr.locator("body").count())
+                except Exception:  # noqa: BLE001 - the person closed the browser window
+                    why = "captcha on form" if captcha else "unanswered required: " + "; ".join(missing[:6])
+                    return ApplyResult(Status.NEEDS_MANUAL,
+                                       f"{why} (browser was closed before Submit; run again)", str(shot), filled)
                 if SUCCESS_RE.search(body):
                     return ApplyResult(Status.APPLIED, "submitted by you after the form was filled", str(shot), filled)
                 return ApplyResult(Status.NEEDS_MANUAL,

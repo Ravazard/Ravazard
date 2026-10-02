@@ -182,7 +182,8 @@ def cmd_apply(args, profile: Profile, store: Store) -> int:
     if submit and args.show_browser and sys.stdin.isatty():
         def human(message: str, page) -> None:
             print(f"\n   >>> {message}")
-            input("   >>> Press Enter here once you've clicked Submit (or to give up on this one)... ")
+            print("   >>> Don't type commands here and don't close the browser yet.")
+            input("   >>> After clicking Submit (or to skip this job), press Enter here... ")
         handover = [j for j in store.by_status(Status.NEEDS_MANUAL)
                     if store.note(j.key).startswith(("captcha", "unanswered required"))]
         queue = (queue + handover)[:limit]
