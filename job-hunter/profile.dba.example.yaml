@@ -102,6 +102,16 @@ answers:
   "school": ""                         # e.g. your college's full name
   "degree": ""                         # e.g. Bachelor's Degree
   "discipline": ""                     # e.g. Electronics and Communication Engineering
+  # Education dates. Forms label these differently, so several spellings are listed.
+  "start date month": ""               # e.g. July
+  "start date year": ""                # e.g. 2020
+  "end date month": ""
+  "end date year": ""
+  "start month": ""
+  "start year": ""
+  "end month": ""
+  "end year": ""
+  "graduation year": ""
   "sponsorship": "No"
   "authorized to work": "Yes"
   "willing to relocate": "Yes"

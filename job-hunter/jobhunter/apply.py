@@ -86,6 +86,14 @@ DESCRIBE_FIELDS_JS = r"""
     return clean(el.name);
   };
 
+  // Nearest heading/legend before a field, e.g. "Education" or "Employment".
+  const heads = [...document.querySelectorAll("h1, h2, h3, h4, legend")];
+  const sectionOf = el => {
+    let sec = "";
+    for (const h of heads) if (h.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) sec = clean(h.innerText);
+    return sec;
+  };
+
   const out = [];
   const seenGroups = new Set();
   let idx = 0;
@@ -106,7 +114,7 @@ DESCRIBE_FIELDS_JS = r"""
           return clean(labelFor(g) || g.value);
         });
         out.push({ idx: idx++, kind: type + "-group", name: el.name, id: el.id, label: groupQuestion(el),
-                   required: group.some(g => g.required) || required, options });
+                   required: group.some(g => g.required) || required, options, section: sectionOf(el) });
         continue;
       }
     }
@@ -117,7 +125,7 @@ DESCRIBE_FIELDS_JS = r"""
       : el.getAttribute("role") === "combobox" ? "combobox"
       : el.tagName === "TEXTAREA" ? "textarea" : type;
     out.push({ idx: idx++, kind, name: el.name || "", id: el.id || "", label: labelFor(el),
-               placeholder: el.placeholder || "", required, options });
+               placeholder: el.placeholder || "", required, options, section: sectionOf(el) });
   }
   return out;
 }
@@ -156,6 +164,7 @@ class Field:
     placeholder: str = ""
     required: bool = False
     options: list[str] = field(default_factory=list)
+    section: str = ""      # nearest heading above the field, e.g. "Education"
 
     @property
     def key(self) -> str:
@@ -189,11 +198,29 @@ def _standard_fields(profile: Profile) -> list[tuple[str, str]]:
     ]
 
 
+_MONTHS = ["january", "february", "march", "april", "may", "june", "july",
+           "august", "september", "october", "november", "december"]
+
+
+def _month_forms(answer: str) -> set[str]:
+    """'July' -> {'july', 'jul', '7', '07'} so month dropdowns match however they're written."""
+    a = answer.strip().lower()
+    for i, m in enumerate(_MONTHS, 1):
+        if a in (m, m[:3], str(i), f"{i:02d}"):
+            return {m, m[:3], str(i), f"{i:02d}"}
+    return set()
+
+
 def pick_option(answer: str, options: list[str]) -> str | None:
     """Choose the option that best matches a free-text answer."""
     if not options:
         return None
     a = answer.strip().lower()
+    months = _month_forms(answer)
+    if months:
+        for opt in options:
+            if opt.strip().lower() in months:
+                return opt
     for opt in options:                       # exact
         if opt.strip().lower() == a:
             return opt
@@ -221,6 +248,11 @@ class Resolver:
         self._std = _standard_fields(profile)
 
     def resolve(self, f: Field) -> str | None:
+        # Your education dates must never land in a job-history section that uses
+        # the same labels ("Start date month"...). Leave those for you to fill.
+        if re.search(r"employ|experience|work history|previous (job|role)", f.section, re.I) and \
+                re.search(r"\b(start|end|graduation|from|to)\b", f.label, re.I):
+            return None
         text_like = f.kind in {"text", "email", "tel", "url", "textarea", "combobox", "number"}
         if text_like:
             for pattern, value in self._std:

@@ -201,3 +201,66 @@ def test_closing_the_browser_during_handover_is_not_a_failure(setup, browser):
                        human=lambda message, page: page.close())
     assert res.status is Status.NEEDS_MANUAL
     assert res.note.startswith("captcha") and "closed" in res.note   # so the next run picks it up again
+
+
+EDUCATION = """
+<div><label for="school">School *</label><input id="school" name="school" required></div>
+<div><label for="sm">Start date month *</label>
+  <select id="sm" name="sm" required><option value="">Month</option><option>Jun</option><option>Jul</option><option>Aug</option></select></div>
+<div><label for="sy">Start date year *</label><input id="sy" name="sy" required></div>
+<div><label for="em">End date month</label>
+  <select id="em" name="em"><option value="">Month</option><option>06</option><option>07</option></select></div>
+<div><label for="ey">End date year</label><input id="ey" name="ey"></div>
+"""
+
+
+def test_education_dates_filled(setup, browser):
+    tmp, profile, job = setup
+    (tmp / "form.html").write_text((tmp / "form.html").read_text().replace("<!--EXTRA-->", EDUCATION))
+    profile.answers.update({
+        "school": "Amrita Vishwa Vidyapeetham",
+        "start date month": "July", "start date year": "2020",
+        "end date month": "July", "end date year": "2024",
+    })
+    res = apply_to_job(job, profile, dry_run=True, browser=browser, screenshot_dir=tmp / "shots")
+    assert res.status is Status.DRY_RUN, res.note
+    f = res.filled
+    assert f["School"] == "Amrita Vishwa Vidyapeetham"
+    assert f["Start date month"] == "Jul" and f["Start date year"] == "2020"     # "July" -> "Jul"
+    assert f["End date month"] == "07" and f["End date year"] == "2024"          # "July" -> "07"
+
+
+def test_month_matching():
+    assert pick_option("July", ["Jun", "Jul", "Aug"]) == "Jul"
+    assert pick_option("July", ["06", "07"]) == "07"
+    assert pick_option("July", ["January", "July"]) == "July"
+    assert pick_option("Mayo", ["May", "June"]) is None
+
+
+def test_education_dates_stay_out_of_employment_section(setup, browser):
+    tmp, profile, job = setup
+    employment = """
+<h3>Education</h3>""" + EDUCATION + """
+<h3>Employment</h3>
+<div><label for="wsm">Start date month</label>
+  <select id="wsm" name="wsm"><option value="">Month</option><option>Jul</option><option>Aug</option></select></div>
+<div><label for="wsy">Start date year</label><input id="wsy" name="wsy"></div>
+"""
+    (tmp / "form.html").write_text((tmp / "form.html").read_text().replace("<!--EXTRA-->", employment))
+    profile.answers.update({"school": "Amrita Vishwa Vidyapeetham",
+                            "start date month": "July", "start date year": "2020"})
+    seen = {}
+
+    def person(message, page):        # look at the real field values before submitting
+        seen.update(edu_year=page.locator("#sy").input_value(), job_year=page.locator("#wsy").input_value(),
+                    edu_month=page.locator("#sm").input_value(), job_month=page.locator("#wsm").input_value())
+        page.click("button[type=submit]")
+        page.wait_for_load_state()
+
+    # A CAPTCHA forces the hand-over, so the test can inspect the filled form.
+    (tmp / "form.html").write_text((tmp / "form.html").read_text().replace(
+        "</form>", '<div class="g-recaptcha" style="width:300px;height:80px"></div></form>'))
+    res = apply_to_job(job, profile, dry_run=False, browser=browser, screenshot_dir=tmp / "shots", human=person)
+    assert res.status is Status.APPLIED, res.note
+    assert seen["edu_year"] == "2020" and seen["edu_month"] == "Jul"
+    assert seen["job_year"] == "" and seen["job_month"] == ""      # employment section left alone
