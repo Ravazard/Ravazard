@@ -36,7 +36,7 @@ search:
   remote_only: false
   min_salary_usd: 0
   # Open-source databases only: reject any posting that doesn't mention
-  # MySQL or MariaDB (the core skills below).
+  # MySQL, MariaDB or PostgreSQL (the core skills below).
   require_core_skill: true
   # The job title itself must be about databases. This stops "Site Reliability
   # Engineer" or "Software Engineer" roles that merely mention MySQL.
@@ -52,8 +52,9 @@ search:
 
 # Weighting: core counts 2, other counts 1, basic counts 0.5.
 skills:
-  core: ["MySQL", "MariaDB"]                       # excellent
-  other: ["PostgreSQL", "Linux", "Shell Scripting", # intermediate / good working knowledge
+  # Core = the databases you want jobs for. MySQL/MariaDB and PostgreSQL roles rank equally.
+  core: ["MySQL", "MariaDB", "PostgreSQL"]
+  other: ["Linux", "Shell Scripting",               # good working knowledge
           "Automation", "Monitoring", "Alerting", "Prometheus", "Grafana", "Python",
           "GTID", "Percona XtraBackup", "Terraform", "Ansible", "AWS RDS", "Kubernetes",
           # Typical MySQL DBA duties. Keep only the ones you've actually done;

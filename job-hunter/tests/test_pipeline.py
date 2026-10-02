@@ -110,11 +110,14 @@ def test_open_source_only(profile):
     assert score_job(_job("Database Administrator", "MongoDB sharding and replica sets"), profile).excluded
     # MariaDB / Galera role: strong match.
     maria = score_job(_job("MariaDB DBA", "MariaDB Galera cluster, replication, backups, Linux, bash. 2-4 years."), profile)
-    assert not maria.excluded and maria.score >= 80
-    # Postgres-first role that also mentions MySQL: still a match, but lower than a MySQL-first one.
-    pg = score_job(_job("PostgreSQL DBA", "PostgreSQL primary, some MySQL. Linux."), profile)
-    my = score_job(_job("MySQL DBA", "MySQL, MariaDB, Percona, Linux, shell scripting, replication."), profile)
-    assert not pg.excluded and my.score > pg.score
+    assert not maria.excluded and maria.score >= profile.apply.min_score + 20
+    # PostgreSQL and MySQL roles are accepted and ranked equally.
+    pg = score_job(_job("PostgreSQL DBA", "PostgreSQL, Patroni, Linux, shell scripting, replication."), profile)
+    my = score_job(_job("MySQL DBA", "MySQL, Percona, Linux, shell scripting, replication."), profile)
+    assert not pg.excluded and not my.excluded and pg.score == my.score, (pg, my)
+    # A pure Postgres posting (no MySQL anywhere) is no longer rejected.
+    pure = score_job(_job("Database Administrator", "PostgreSQL 15 administration, vacuum tuning, backups. 2+ years."), profile)
+    assert not pure.excluded and pure.score >= profile.apply.min_score, pure
 
 
 def test_real_false_positives_rejected(profile):
@@ -224,7 +227,7 @@ def test_check_boards_writes_only_working(tmp_path, monkeypatch, capsys):
     assert written.sources.lever == ["meesho"] and written.sources.ashby == []
     # Everything outside sources: is untouched, comments included.
     text = prof.read_text()
-    assert written.skills.core == ["MySQL", "MariaDB"] and "apply:" in text
+    assert written.skills.core == ["MySQL", "MariaDB", "PostgreSQL"] and "apply:" in text
     assert "# Companies whose careers pages run on Greenhouse" in text
 
 
